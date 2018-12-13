@@ -78,9 +78,8 @@ public class CosmosSparkADLAccountNode extends AzureRefreshableNode implements I
     protected void loadActions() {
         super.loadActions();
 
-        // TODO: enable after testing with backend ready
-        /*addAction("Submit Serverless Spark Job", new CosmosServerlessSparkSubmitAction(
-                this, adlAccount, CosmosSparkClusterOps.getInstance().getServerlessSubmitAction()));*/
+        addAction("Submit Serverless Spark Job", new CosmosServerlessSparkSubmitAction(
+                this, adlAccount, CosmosSparkClusterOps.getInstance().getServerlessSubmitAction()));
 
         addAction("Provision Spark Cluster", new CosmosSparkProvisionAction(
                 this, adlAccount, CosmosSparkClusterOps.getInstance().getProvisionAction()));

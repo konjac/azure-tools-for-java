@@ -957,7 +957,7 @@ public class SparkBatchJob implements ISparkBatchJob, ILogger {
         throw new UnknownServiceException("Failed to detect job activity: Unknown service error after " + --retries + " retries");
     }
 
-    private Observable<SimpleImmutableEntry<String, String>> getJobDoneObservable() {
+    protected Observable<SimpleImmutableEntry<String, String>> getJobDoneObservable() {
         if (getConnectUri() == null) {
             return Observable.error(new SparkJobNotConfiguredException("Can't get Spark job connection URI, " +
                     "please configure Spark cluster which the Spark job will be submitted."));

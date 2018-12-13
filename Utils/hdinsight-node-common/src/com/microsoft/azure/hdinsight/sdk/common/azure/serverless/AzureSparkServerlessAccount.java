@@ -106,51 +106,6 @@ public class AzureSparkServerlessAccount implements IClusterDetail, ClusterConta
         return subscription;
     }
 
-    @Override
-    public int getDataNodes() {
-        return 0;
-    }
-
-    @Override
-    public String getHttpUserName() throws HDIException {
-        return null;
-    }
-
-    @Override
-    public String getHttpPassword() throws HDIException {
-        return null;
-    }
-
-    @Override
-    public String getOSType() {
-        return null;
-    }
-
-    @Override
-    public String getResourceGroup() {
-        return null;
-    }
-
-    @Override
-    public IHDIStorageAccount getStorageAccount() throws HDIException {
-        return null;
-    }
-
-    @Override
-    public List<HDStorageAccount> getAdditionalStorageAccounts() {
-        return null;
-    }
-
-    @Override
-    public void getConfigurationInfo() throws IOException, HDIException, AzureCmdException {
-
-    }
-
-    @Override
-    public String getSparkVersion() {
-        return null;
-    }
-
     @NotNull
     public AzureHttpObservable getHttp() {
         return http;
@@ -377,16 +332,6 @@ public class AzureSparkServerlessAccount implements IClusterDetail, ClusterConta
         return this;
     }
 
-    @Override
-    public boolean isEmulator() {
-        return false;
-    }
-
-    @Override
-    public boolean isConfigInfoAvailable() {
-        return false;
-    }
-
     @NotNull
     public String getName() {
         return name;
@@ -398,32 +343,7 @@ public class AzureSparkServerlessAccount implements IClusterDetail, ClusterConta
     }
 
     @Override
-    public String getState() {
-        return null;
-    }
-
-    @Override
-    public String getLocation() {
-        return null;
-    }
-
-    @Override
     public String getConnectionUrl() {
-        return null;
-    }
-
-    @Override
-    public String getCreateDate() {
-        return null;
-    }
-
-    @Override
-    public ClusterType getType() {
-        return null;
-    }
-
-    @Override
-    public String getVersion() {
         return null;
     }
 

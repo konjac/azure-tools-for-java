@@ -8,18 +8,19 @@ import com.microsoft.azure.hdinsight.spark.common.SparkSubmissionParameter
 import com.microsoft.azuretools.utils.Pair
 import java.util.stream.Stream
 
-class CosmosServerlessSparkSubmitModel(project: Project) : CosmosSparkSubmitModel(project) {
-    private var submissionParameter : CreateSparkBatchJobParameters = CreateSparkBatchJobParameters()
-            .withSparkEventsDirectoryPath("sp1ark-events")
+class CosmosServerlessSparkSubmitModel(project: Project) : CosmosSparkSubmitModel(project, CreateSparkBatchJobParameters()) {
+    init {
+        setSparkEventsDirectoryPath("spark-events")
+    }
 
     @Attribute("sparkevents_directory")
     fun getSparkEventsDirectoryPath(): String {
-        return submissionParameter.sparkEventsDirectoryPath()
+        return (submissionParameter as CreateSparkBatchJobParameters).sparkEventsDirectoryPath()
     }
 
     @Attribute("sparkevents_directory")
     fun setSparkEventsDirectoryPath(path: String) {
-        submissionParameter.withSparkEventsDirectoryPath(path)
+        (submissionParameter as CreateSparkBatchJobParameters).withSparkEventsDirectoryPath(path)
     }
 
     override fun getDefaultParameters(): Stream<Pair<String, out Any>> {
@@ -30,9 +31,5 @@ class CosmosServerlessSparkSubmitModel(project: Project) : CosmosSparkSubmitMode
                 Pair(SparkSubmissionParameter.ExecutorCores, SparkSubmissionParameter.ExecutorCoresDefaultValue),
                 Pair(SparkSubmissionParameter.NumExecutors, SparkSubmissionParameter.NumExecutorsDefaultValue)
         ).stream()
-    }
-
-    override fun getSubmissionParameter(): SparkSubmissionParameter {
-        return submissionParameter
     }
 }

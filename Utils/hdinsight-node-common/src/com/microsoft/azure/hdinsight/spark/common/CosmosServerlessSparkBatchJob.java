@@ -94,7 +94,7 @@ public class CosmosServerlessSparkBatchJob extends SparkBatchJob {
             try {
                 String path = getSubmissionParameter().sparkEventsDirectoryPath();
                 String accessToken = getHttp().getAccessToken();
-                ADLStoreClient storeClient = ADLStoreClient.createClient(URI.create(path).getHost(), accessToken);
+                ADLStoreClient storeClient = ADLStoreClient.createClient(URI.create(account.getStorageRootPath()).getHost(), accessToken);
                 if (storeClient.checkExists(path)) {
                     return true;
                 } else {
@@ -152,7 +152,13 @@ public class CosmosServerlessSparkBatchJob extends SparkBatchJob {
     @Override
     public Observable<SparkBatchJobResponsePayload> getStatus() {
         return getAccount().getSparkBatchJobRequest(getJobUuid())
-                .map(sparkBatchJob -> sparkBatchJob.properties().responsePayload());
+                .flatMap(sparkBatchJob -> {
+                    if (sparkBatchJob.properties() == null) {
+                        return Observable.empty();
+                    } else {
+                        return Observable.just(sparkBatchJob.properties().responsePayload());
+                    }
+                });
     }
 
     @Nullable
@@ -163,7 +169,7 @@ public class CosmosServerlessSparkBatchJob extends SparkBatchJob {
                 .repeatWhen(ob -> ob.delay(getDelaySeconds(), TimeUnit.SECONDS))
                 .map(sparkSubmitResponse -> sparkSubmitResponse.getState())
                 .toBlocking()
-                .singleOrDefault("error");
+                .singleOrDefault("unknown");
     }
 
     @Override
@@ -176,7 +182,8 @@ public class CosmosServerlessSparkBatchJob extends SparkBatchJob {
                 .singleOrDefault(false);
     }
 
-    private Observable<AbstractMap.SimpleImmutableEntry<String, String>> getJobDoneObservable() {
+    @Override
+    protected Observable<AbstractMap.SimpleImmutableEntry<String, String>> getJobDoneObservable() {
         return getStatus()
                 .repeatWhen(ob -> ob.delay(getDelaySeconds(), TimeUnit.SECONDS))
                 .takeUntil(resp -> isDone(resp.getState()))
@@ -191,10 +198,12 @@ public class CosmosServerlessSparkBatchJob extends SparkBatchJob {
     @Override
     public Observable<AbstractMap.SimpleImmutableEntry<MessageInfoType, String>> getSubmissionLog() {
         // TODO: Replace it with HttpObservable
-        return super.getSubmissionLog();
+        return Observable.create(ob -> {
+            ob.onNext(new AbstractMap.SimpleImmutableEntry<>(MessageInfoType.Info, "Submission log not supported yet"));
+        });
     }
 
-        private void ctrlInfo(@NotNull String message) {
+    private void ctrlInfo(@NotNull String message) {
         getCtrlSubject().onNext(new AbstractMap.SimpleImmutableEntry<>(MessageInfoType.Info, message));
     }
 }

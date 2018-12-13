@@ -5,6 +5,7 @@ import com.intellij.execution.configurations.RuntimeConfigurationError
 import com.intellij.openapi.project.Project
 import com.intellij.uiDesigner.core.GridConstraints
 import com.microsoft.azure.hdinsight.sdk.cluster.IClusterDetail
+import com.microsoft.azure.hdinsight.sdk.common.azure.serverless.AzureSparkServerlessAccount
 import com.microsoft.azure.hdinsight.sdk.common.azure.serverless.AzureSparkServerlessClusterManager
 import com.microsoft.azure.hdinsight.spark.common.SparkSubmitModel
 import com.microsoft.azure.hdinsight.spark.run.configuration.CosmosServerlessSparkSubmitModel
@@ -17,10 +18,7 @@ import javax.swing.JLabel
 import javax.swing.JPanel
 import javax.swing.JTextField
 
-open class CosmosServerlessSparkSubmissionContentPanelConfigurable(project : Project) : SparkSubmissionContentPanelConfigurable(project) {
-    private val cosmosServerlessSubmissionPanel : JPanel by lazy {
-        buildPanel()
-    }
+open class CosmosServerlessSparkSubmissionContentPanelConfigurable(project : Project) : SparkSubmissionContentPanelConfigurable(project, false) {
 
     @NotNull
     override fun getClusterDetails(): ImmutableSortedSet<out IClusterDetail> {
@@ -36,13 +34,24 @@ open class CosmosServerlessSparkSubmissionContentPanelConfigurable(project : Pro
 
     override fun onClusterSelected(@NotNull cluster: IClusterDetail) {
         super.onClusterSelected(cluster)
-        this.sparkEventsDirectoryPrefixField.text = "adl://${cluster.name}.azuredatalakestore.net/"
+        this.sparkEventsDirectoryPrefixField.text = (cluster as? AzureSparkServerlessAccount)?.storageRootPath
     }
 
     override fun getData(@NotNull data: SparkSubmitModel) {
         super.getData(data)
-        val sparkEventsPath = this.sparkEventsDirectoryField.text
-        (data as CosmosServerlessSparkSubmitModel).setSparkEventsDirectoryPath(sparkEventsPath)
+
+        // Component -> Data
+        (data as CosmosServerlessSparkSubmitModel).apply {
+            val account = selectedClusterDetail as? AzureSparkServerlessAccount
+            if (account != null) {
+                tenantId = account.subscription.tenantId
+                accountName = account.name
+                clusterId = account.id
+                livyUri = account.connectionUrl?.toString() ?: ""
+
+                setSparkEventsDirectoryPath(sparkEventsDirectoryField.text)
+            }
+        }
     }
 
     override fun setData(@NotNull data: SparkSubmitModel) {
@@ -51,7 +60,7 @@ open class CosmosServerlessSparkSubmissionContentPanelConfigurable(project : Pro
     }
 
     override fun getComponent(): JComponent {
-        return cosmosServerlessSubmissionPanel
+        return buildPanel()
     }
 
     private val sparkEventsPrompt = JLabel("Spark Events directory:").apply {
@@ -74,6 +83,7 @@ open class CosmosServerlessSparkSubmissionContentPanelConfigurable(project : Pro
 
     private fun buildPanel() : JPanel {
         this.submissionPanel.clustersSelectionPrompt.text = "ADL account"
+        this.submissionPanel.buildPanel()
         val formBuilder = panel {
             columnTemplate {
                 col {

@@ -160,7 +160,7 @@ public class SparkSubmissionParameter implements IConvertible {
         localArtifactPath = path;
     }
 
-    @JsonProperty(NAME)
+    @JsonProperty("name")
     public String getName() {
         return name;
     }

@@ -267,7 +267,7 @@ public class SparkSubmitModel {
     @Transient
     public synchronized void setTableModel(@NotNull SubmissionTableModel tableModel) {
         // Apply from table model
-        submissionParameter.applyFlattedJobConf(tableModel.getJobConfigMap());
+        getSubmissionParameter().applyFlattedJobConf(tableModel.getJobConfigMap());
 
         this.tableModel = tableModel;
     }

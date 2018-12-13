@@ -63,6 +63,8 @@ open class SparkSubmissionContentPanel : JPanel() {
         const val REFRESH_BUTTON_PATH = "/icons/refresh.png"
     }
 
+    var enableStoragePanel : Boolean = true
+
     private enum class ErrorMessage {
         ClusterName,
         SystemArtifact,
@@ -241,13 +243,13 @@ open class SparkSubmissionContentPanel : JPanel() {
                                   .map { it.text }
 
     @Suppress("UNCHECKED_CAST")
-    var clustersModel: ImmutableComboBoxModel<IClusterDetail>
+    open var clustersModel: ImmutableComboBoxModel<IClusterDetail>
         get() = clustersListComboBox.comboBox.model as ImmutableComboBoxModel<IClusterDetail>
         set(model) {
             clustersListComboBox.comboBox.model = model as ComboBoxModel<Any>
         }
 
-    init {
+    fun buildPanel() {
         val formBuilder = panel {
             columnTemplate {
                 col {
@@ -260,6 +262,7 @@ open class SparkSubmissionContentPanel : JPanel() {
                     fill = FILL_HORIZONTAL
                 }
             }
+
             row { c(clustersSelectionPrompt);             c(clustersListComboBox) }
             row { c();                                    c(errorMessageLabels[ErrorMessage.ClusterName.ordinal]) { fill = FILL_NONE } }
             row { c(artifactSelectLabel) }
@@ -274,9 +277,11 @@ open class SparkSubmissionContentPanel : JPanel() {
             row { c(commandLineArgsPrompt);               c(commandLineTextField) }
             row { c(refJarsPrompt);                       c(referencedJarsTextField) }
             row { c(refFilesPrompt);                      c(referencedFilesTextField) }
-            row { c(storageWithUploadPathPanel) { colSpan = 2; fill = FILL_HORIZONTAL }; }
-        }
 
+            if (enableStoragePanel) {
+                row { c(storageWithUploadPathPanel) { colSpan = 2; fill = FILL_HORIZONTAL }; }
+            }
+        }
         this.add(formBuilder.buildPanel())
         this.addContainerListener(object : ContainerAdapter() {
             override fun componentRemoved(e: ContainerEvent) {
