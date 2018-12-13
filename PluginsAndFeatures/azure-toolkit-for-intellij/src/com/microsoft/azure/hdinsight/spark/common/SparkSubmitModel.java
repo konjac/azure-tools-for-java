@@ -91,7 +91,14 @@ public class SparkSubmitModel {
         this.jobUploadStorageModel = new SparkSubmitJobUploadStorageModel();
         this.submissionParameter = submissionParameter;
 
-        setTableModel(new SubmissionTableModel(submissionParameter.flatJobConfig()));
+        SubmissionTableModel tableModel = new SubmissionTableModel(submissionParameter.flatJobConfig());
+        this.tableModel = tableModel;
+
+        initializeTableModel(tableModel);
+
+        // Apply from table model
+        this.submissionParameter.applyFlattedJobConf(tableModel.getJobConfigMap());
+
     }
 
     @Transient
@@ -267,7 +274,7 @@ public class SparkSubmitModel {
     @Transient
     public synchronized void setTableModel(@NotNull SubmissionTableModel tableModel) {
         // Apply from table model
-        submissionParameter.applyFlattedJobConf(tableModel.getJobConfigMap());
+        getSubmissionParameter().applyFlattedJobConf(tableModel.getJobConfigMap());
 
         this.tableModel = tableModel;
     }

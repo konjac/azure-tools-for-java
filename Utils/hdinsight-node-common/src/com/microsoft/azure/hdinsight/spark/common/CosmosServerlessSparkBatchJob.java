@@ -94,7 +94,7 @@ public class CosmosServerlessSparkBatchJob extends SparkBatchJob {
             try {
                 String path = getSubmissionParameter().sparkEventsDirectoryPath();
                 String accessToken = getHttp().getAccessToken();
-                ADLStoreClient storeClient = ADLStoreClient.createClient(URI.create(path).getHost(), accessToken);
+                ADLStoreClient storeClient = ADLStoreClient.createClient(URI.create(this.account.getStorageRootPath()).getHost(), accessToken);
                 if (storeClient.checkExists(path)) {
                     return true;
                 } else {
