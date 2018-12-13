@@ -94,8 +94,6 @@ public class SparkSubmitModel {
         SubmissionTableModel tableModel = new SubmissionTableModel(submissionParameter.flatJobConfig());
         this.tableModel = tableModel;
 
-        initializeTableModel(tableModel);
-
         // Apply from table model
         this.submissionParameter.applyFlattedJobConf(tableModel.getJobConfigMap());
 
