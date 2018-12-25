@@ -37,7 +37,8 @@ public class AddNewClusterModel implements Cloneable {
     private String passwordLabelTitle;
 
     @NotNull
-    private SparkClusterType sparkClusterType;
+    // set default cluster type as HDINSIGHT_CLUSTER (to be compatible with Eclipse code)
+    private SparkClusterType sparkClusterType = SparkClusterType.HDINSIGHT_CLUSTER;
     private String clusterName;
     private String userName;
     private String password;
@@ -45,6 +46,9 @@ public class AddNewClusterModel implements Cloneable {
     private URI livyEndpoint;
     @Nullable
     private URI yarnEndpoint;
+    @Nullable
+    private String host;
+    private int knoxPort = 30443;
 
     private String storageName;
     private String storageKey;
@@ -162,6 +166,26 @@ public class AddNewClusterModel implements Cloneable {
 
     public AddNewClusterModel setYarnEndpoint(@Nullable URI yarnEndpoint) {
         this.yarnEndpoint = yarnEndpoint;
+        return this;
+    }
+
+    @Nullable
+    public String getHost() {
+        return host;
+    }
+
+    public AddNewClusterModel setHost(@Nullable String host) {
+        this.host = host;
+        return this;
+    }
+
+    public int getKnoxPort() {
+        return knoxPort;
+    }
+
+    @NotNull
+    public AddNewClusterModel setKnoxPort(int knoxPort) {
+        this.knoxPort = knoxPort;
         return this;
     }
 

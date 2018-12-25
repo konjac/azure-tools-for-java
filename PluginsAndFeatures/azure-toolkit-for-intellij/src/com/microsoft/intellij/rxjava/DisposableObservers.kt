@@ -1,42 +1,38 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
- * <p/>
+ *
  * All rights reserved.
- * <p/>
+ *
  * MIT License
- * <p/>
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
  * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- * <p/>
+ *
  * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
  * the Software.
- * <p/>
+ *
  * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.microsoft.azure.hdinsight.serverexplore.hdinsightnode;
 
-import com.microsoft.tooling.msservices.serviceexplorer.AzureRefreshableNode;
-import com.microsoft.tooling.msservices.serviceexplorer.Node;
+package com.microsoft.intellij.rxjava
 
-public abstract class HDInsightRootModule extends AzureRefreshableNode {
+import com.intellij.openapi.Disposable
+import rx.Observer
 
-    public HDInsightRootModule(String id, String name, Node parent, String iconPath) {
-        super(id, name, parent, iconPath);
+open class DisposableObservers: Disposable {
+    private val observables = mutableListOf<Observer<*>>()
+
+    override fun dispose() {
+        observables.forEach { it.onCompleted() }
     }
 
-    public HDInsightRootModule(String id, String name, Node parent, String iconPath, boolean delayActionLoading) {
-        super(id, name, parent, iconPath, delayActionLoading);
-    }
-
-    public abstract HDInsightRootModule getNewNode(Node parent);
-
-    public boolean isFeatureEnabled() {
-        return false;
+    fun <T: Observer<*>> disposableSubjectOf(cons: () -> T): T {
+        return cons().apply { observables.add(this@apply) }
     }
 }

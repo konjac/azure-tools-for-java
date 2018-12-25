@@ -24,9 +24,9 @@ package com.microsoft.azure.hdinsight.spark.run.configuration
 
 import com.intellij.openapi.project.Project
 import com.microsoft.azure.hdinsight.spark.ui.SparkBatchJobConfigurable
-import com.microsoft.azure.hdinsight.spark.ui.SparkSubmissionContentPanelConfigurable
+import com.microsoft.azure.hdinsight.spark.ui.SparkSubmissionContentPanel
 
 class ArisSparkConfigurable(project: Project) : SparkBatchJobConfigurable(project) {
-    override fun createSubmissionPanel(): SparkSubmissionContentPanelConfigurable =
+    override fun createSubmissionPanel(): SparkSubmissionContentPanel =
             ArisSparkSubmissionContentPanel(project)
 }

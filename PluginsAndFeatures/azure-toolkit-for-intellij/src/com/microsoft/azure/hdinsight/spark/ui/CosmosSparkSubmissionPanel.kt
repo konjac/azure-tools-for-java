@@ -22,32 +22,27 @@
 
 package com.microsoft.azure.hdinsight.spark.ui
 
-import com.google.common.collect.ImmutableSortedSet
 import com.intellij.openapi.project.Project
-import com.microsoft.azure.hdinsight.common.logger.ILogger
-import com.microsoft.azure.hdinsight.sdk.cluster.IClusterDetail
+import com.intellij.openapi.util.Disposer
 import com.microsoft.azure.hdinsight.sdk.common.azure.serverless.AzureSparkServerlessCluster
-import com.microsoft.azure.hdinsight.sdk.common.azure.serverless.AzureSparkServerlessClusterManager
 import com.microsoft.azure.hdinsight.spark.common.CosmosSparkSubmitModel
 import com.microsoft.azure.hdinsight.spark.common.SparkSubmitModel
-import rx.Observable
 
-class CosmosSparkSubmissionPanelConfigurable(project: Project)
-    : SparkSubmissionContentPanelConfigurable(project), ILogger {
-    override fun getType(): String = "Azure Data Lake Spark Pool"
+class CosmosSparkSubmissionPanel(project: Project)
+    : SparkSubmissionContentPanel(project, "Azure Data Lake Spark Pool") {
 
-    override fun getClusterDetails(): ImmutableSortedSet<out IClusterDetail> {
-        return AzureSparkServerlessClusterManager.getInstance().clusters
-    }
+    override val clustersSelection: SparkClusterListRefreshableCombo by lazy { CosmosSparkClustersCombo().apply {
+        Disposer.register(this@CosmosSparkSubmissionPanel, this@apply)
+    }}
 
-    override fun getClusterDetailsWithRefresh(): Observable<ImmutableSortedSet<out IClusterDetail>> {
-        return AzureSparkServerlessClusterManager.getInstance().fetchClusters().map { it.clusters }
-    }
-
-    override fun getData(data: SparkSubmitModel?) {
+    override fun getData(data: SparkSubmitModel) {
         // Component -> Data
-        val serverlessData = data as CosmosSparkSubmitModel
-        val cluster = selectedClusterDetail as? AzureSparkServerlessCluster
+        super.getData(data)
+
+        val serverlessData = data as? CosmosSparkSubmitModel ?: return
+        val cluster = viewModel.clusterSelection.let {
+            it.findClusterById(it.clusterListModelBehavior.value, it.toSelectClusterByIdBehavior.value) as? AzureSparkServerlessCluster
+        }
 
         if (cluster != null) {
             serverlessData.tenantId = cluster.subscription.tenantId
@@ -55,7 +50,5 @@ class CosmosSparkSubmissionPanelConfigurable(project: Project)
             serverlessData.clusterId = cluster.guid
             serverlessData.livyUri = cluster.livyUri?.toString() ?: ""
         }
-
-        super.getData(data)
     }
 }
