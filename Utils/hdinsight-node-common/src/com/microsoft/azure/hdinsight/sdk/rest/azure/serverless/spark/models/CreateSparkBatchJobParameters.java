@@ -35,6 +35,17 @@ import com.microsoft.azure.hdinsight.spark.common.SparkSubmissionParameter;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class CreateSparkBatchJobParameters extends SparkSubmissionParameter {
+    public static final String DriverMemory = "driverMemory";
+    public static final String DriverMemoryDefaultValue = "12G";
+    public static final String DriverCores = "driverCores";
+    public static final Integer DriverCoresDefaultValue = 4;
+    public static final String ExecutorMemory = "executorMemory";
+    public static final String ExecutorMemoryDefaultValue = "12G";
+    public static final String NumExecutors = "numExecutors";
+    public static final Integer NumExecutorsDefaultValue = 5;
+    public static final String ExecutorCores = "executorCores";
+    public static final Integer ExecutorCoresDefaultValue = 4;
+
     @JsonIgnoreProperties
     private String adlAccountName;
 
