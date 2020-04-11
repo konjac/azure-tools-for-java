@@ -1,33 +1,34 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
- * <p/>
+ *
  * All rights reserved.
- * <p/>
+ *
  * MIT License
- * <p/>
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
  * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- * <p/>
+ *
  * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
  * the Software.
- * <p/>
+ *
  * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
 package com.microsoft.tooling.msservices.serviceexplorer.azure.storage;
 
 import com.google.common.collect.ImmutableMap;
 import com.microsoft.azure.management.resources.fluentcore.arm.ResourceId;
 import com.microsoft.azure.management.storage.StorageAccount;
+import com.microsoft.azuretools.azurecommons.helpers.AzureCmdException;
 import com.microsoft.azuretools.telemetry.AppInsightsConstants;
 import com.microsoft.azuretools.telemetry.TelemetryProperties;
 import com.microsoft.tooling.msservices.components.DefaultLoader;
-import com.microsoft.azuretools.azurecommons.helpers.AzureCmdException;
 import com.microsoft.tooling.msservices.helpers.azure.sdk.StorageClientSDKManager;
 import com.microsoft.tooling.msservices.model.storage.BlobContainer;
 import com.microsoft.tooling.msservices.model.storage.ClientStorageAccount;
@@ -39,6 +40,9 @@ import com.microsoft.tooling.msservices.serviceexplorer.azure.AzureNodeActionPro
 
 import java.util.HashMap;
 import java.util.Map;
+
+import static com.microsoft.azuretools.telemetry.TelemetryConstants.DELETE_BLOB_CONTAINER;
+import static com.microsoft.azuretools.telemetry.TelemetryConstants.STORAGE;
 
 public class ContainerNode extends Node implements TelemetryProperties{
     @Override
@@ -81,13 +85,22 @@ public class ContainerNode extends Node implements TelemetryProperties{
 
             try {
                 StorageClientSDKManager.getManager().deleteBlobContainer(storageAccount, blobContainer);
-
                 parent.removeAllChildNodes();
                 ((RefreshableNode) parent).load(false);
             } catch (AzureCmdException ex) {
                 DefaultLoader.getUIHelper().showException("An error occurred while attempting to delete blob storage", ex,
-                        "MS Services - Error Deleting Blob Storage", false, true);
+                    "MS Services - Error Deleting Blob Storage", false, true);
             }
+        }
+
+        @Override
+        protected String getServiceName(NodeActionEvent event) {
+            return STORAGE;
+        }
+
+        @Override
+        protected String getOperationName(NodeActionEvent event) {
+            return DELETE_BLOB_CONTAINER;
         }
 
         @Override

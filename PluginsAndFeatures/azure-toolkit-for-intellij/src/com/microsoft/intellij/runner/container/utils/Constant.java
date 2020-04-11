@@ -22,6 +22,8 @@
 
 package com.microsoft.intellij.runner.container.utils;
 
+import com.microsoft.azure.management.appservice.PricingTier;
+
 public class Constant {
     public static final int TIMEOUT_STOP_CONTAINER = 5;
     public static final String CONSOLE_NAME = "AzureToolsConsole";
@@ -43,7 +45,7 @@ public class Constant {
     public static final String DOCKERFILE_CONTENT_TOMCAT = "FROM tomcat:8.5-jre8\r\n"
             + "RUN rm -fr /usr/local/tomcat/webapps/ROOT\r\n"
             + "COPY %s /usr/local/tomcat/webapps/ROOT.war\r\n";
-    public static final String DOCKERFILE_CONTENT_SPRING = "FROM openjdk:8-jdk-alpine\r\n"
+    public static final String DOCKERFILE_CONTENT_SPRING = "FROM azul/zulu-openjdk-alpine:8\r\n"
             + "VOLUME /tmp\r\n"
             + "EXPOSE 8080\r\n"
             + "COPY %s app.jar\r\n"
@@ -62,4 +64,5 @@ public class Constant {
     public static final String MESSAGE_DOCKER_HOST_INFO = "Current docker host: %s";
     public static final String MESSAGE_EXECUTE_DOCKER_RUN = "Executing Docker Run...";
     public static final String DOCKERFILE_ARTIFACT_PLACEHOLDER = "<artifact>";
+    public static final String WEBAPP_CONTAINER_DEFAULT_PRICING_TIER = new PricingTier("Premium", "P1V2").toString();
 }

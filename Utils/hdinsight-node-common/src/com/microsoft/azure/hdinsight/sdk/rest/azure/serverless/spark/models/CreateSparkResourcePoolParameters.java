@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
  *
  * All rights reserved.
@@ -18,17 +18,20 @@
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
- *
  */
 
 package com.microsoft.azure.hdinsight.sdk.rest.azure.serverless.spark.models;
 
 import java.util.List;
+import java.util.Map;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
  * Spark specific resource pool information.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class CreateSparkResourcePoolParameters {
     /**
      * Version of the template used while deploying the resource pool.
@@ -45,7 +48,7 @@ public class CreateSparkResourcePoolParameters {
     /**
      * ADLS directory path to store Spark events and logs.
      */
-    @JsonProperty(value = "sparkEventsDirectoryPath")
+    @JsonProperty(value = "sparkEventsDirectoryPath", required = true)
     private String sparkEventsDirectoryPath;
 
     /**
@@ -55,7 +58,13 @@ public class CreateSparkResourcePoolParameters {
     private List<CreateSparkResourcePoolItemParameters> sparkResourceCollection;
 
     /**
-     * Get the resourcePoolVersion value.
+     * Special properties that will allow choosing/targeting of features (runtime, gp version etc) on server side.
+     */
+    @JsonProperty(value = "extendedProperties")
+    private Map<String, String> extendedProperties;
+
+    /**
+     * Get version of the template used while deploying the resource pool.
      *
      * @return the resourcePoolVersion value
      */
@@ -64,7 +73,7 @@ public class CreateSparkResourcePoolParameters {
     }
 
     /**
-     * Set the resourcePoolVersion value.
+     * Set version of the template used while deploying the resource pool.
      *
      * @param resourcePoolVersion the resourcePoolVersion value to set
      * @return the CreateSparkResourcePoolParameters object itself.
@@ -75,7 +84,7 @@ public class CreateSparkResourcePoolParameters {
     }
 
     /**
-     * Get the sparkVersion value.
+     * Get spark version to be deployed on the instances of the resource pool.
      *
      * @return the sparkVersion value
      */
@@ -84,7 +93,7 @@ public class CreateSparkResourcePoolParameters {
     }
 
     /**
-     * Set the sparkVersion value.
+     * Set spark version to be deployed on the instances of the resource pool.
      *
      * @param sparkVersion the sparkVersion value to set
      * @return the CreateSparkResourcePoolParameters object itself.
@@ -95,7 +104,7 @@ public class CreateSparkResourcePoolParameters {
     }
 
     /**
-     * Get the sparkEventsDirectoryPath value.
+     * Get aDLS directory path to store Spark events and logs.
      *
      * @return the sparkEventsDirectoryPath value
      */
@@ -104,7 +113,7 @@ public class CreateSparkResourcePoolParameters {
     }
 
     /**
-     * Set the sparkEventsDirectoryPath value.
+     * Set aDLS directory path to store Spark events and logs.
      *
      * @param sparkEventsDirectoryPath the sparkEventsDirectoryPath value to set
      * @return the CreateSparkResourcePoolParameters object itself.
@@ -115,7 +124,7 @@ public class CreateSparkResourcePoolParameters {
     }
 
     /**
-     * Get the sparkResourceCollection value.
+     * Get definition of spark master and spark workers.
      *
      * @return the sparkResourceCollection value
      */
@@ -124,13 +133,33 @@ public class CreateSparkResourcePoolParameters {
     }
 
     /**
-     * Set the sparkResourceCollection value.
+     * Set definition of spark master and spark workers.
      *
      * @param sparkResourceCollection the sparkResourceCollection value to set
      * @return the CreateSparkResourcePoolParameters object itself.
      */
     public CreateSparkResourcePoolParameters withSparkResourceCollection(List<CreateSparkResourcePoolItemParameters> sparkResourceCollection) {
         this.sparkResourceCollection = sparkResourceCollection;
+        return this;
+    }
+
+    /**
+     * Get special properties that will allow choosing/targeting of features (runtime, gp version etc) on server side.
+     *
+     * @return the extendedProperties value
+     */
+    public Map<String, String> extendedProperties() {
+        return this.extendedProperties;
+    }
+
+    /**
+     * Set special properties that will allow choosing/targeting of features (runtime, gp version etc) on server side.
+     *
+     * @param extendedProperties the extendedProperties value to set
+     * @return the CreateSparkResourcePoolParameters object itself.
+     */
+    public CreateSparkResourcePoolParameters withExtendedProperties(Map<String, String> extendedProperties) {
+        this.extendedProperties = extendedProperties;
         return this;
     }
 

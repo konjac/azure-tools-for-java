@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
  *
  * All rights reserved.
@@ -22,13 +22,15 @@
 
 package com.microsoft.azuretools.core.mvp.model.rediscache;
 
+import java.util.List;
 import java.util.Map;
-
+import com.microsoft.azure.management.redis.RebootType;
 import com.microsoft.azure.management.redis.RedisAccessKeys;
 import com.microsoft.azure.management.redis.RedisCache;
 import com.microsoft.azure.management.redis.RedisCachePremium;
 import com.microsoft.azure.management.redis.RedisFirewallRule;
 import com.microsoft.azure.management.redis.RedisKeyType;
+import com.microsoft.azure.management.redis.ScheduleEntry;
 import com.microsoft.azure.management.redis.Sku;
 import com.microsoft.azure.management.redis.TlsVersion;
 import com.microsoft.azure.management.redis.implementation.RedisManager;
@@ -189,13 +191,23 @@ public class RedisCacheMock implements RedisCache{
         return new RedisAccessKeysMock();
     }
 
-	@Override
-	public TlsVersion minimumTlsVersion() {
-		return null;
-	}
+    @Override
+    public TlsVersion minimumTlsVersion() {
+        return null;
+    }
 
-	@Override
-	public Map<String, RedisFirewallRule> firewallRules() {
-		return null;
-	}
+    @Override
+    public Map<String, RedisFirewallRule> firewallRules() {
+        return null;
+    }
+
+    @Override
+    public void forceReboot(RebootType arg0) {
+    }
+
+    @Override
+    public List<ScheduleEntry> patchSchedules() {
+        return null;
+    }
+
 }

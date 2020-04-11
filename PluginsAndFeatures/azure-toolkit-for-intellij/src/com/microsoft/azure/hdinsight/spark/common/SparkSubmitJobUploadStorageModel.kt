@@ -29,28 +29,67 @@ package com.microsoft.azure.hdinsight.spark.common
 
 import com.intellij.util.xmlb.annotations.Attribute
 import com.intellij.util.xmlb.annotations.Tag
+import com.intellij.util.xmlb.annotations.Transient
+import com.microsoft.azure.hdinsight.common.AbfsUri
+import com.microsoft.azure.hdinsight.common.logger.ILogger
 import com.microsoft.azure.hdinsight.spark.ui.SparkSubmissionJobUploadStoragePanel
+import javax.swing.ComboBoxModel
 import javax.swing.DefaultComboBoxModel
 
 @Tag("job_upload_storage")
-class SparkSubmitJobUploadStorageModel {
+class SparkSubmitJobUploadStorageModel: ILogger, SparkSubmissionJobUploadStoragePanel.Model {
     @Attribute("storage_account")
-    var storageAccount: String? = null
+    override var storageAccount: String? = null
 
-    @Attribute("storage_key")
-    var storageKey: String? = null
+    @Attribute("adls_gen2_account")
+    override var gen2Account: String? = null
 
-    @Transient var containersModel: DefaultComboBoxModel<String> = DefaultComboBoxModel()
+    // model for ADLS Gen 2 storage type
+    @Attribute("adls_gen2_root_path", converter = AbfsUriConverter::class)
+    override var gen2RootPath: AbfsUri? = null
+
+    @Attribute("adls_gen2_root_path_raw_text")
+    override var gen2RootPathRawText: String? = null
+
+    @get:Transient @set:Transient
+    override var storageKey: String? = null
+
+    @get:Transient @set:Transient
+    override var accessKey: String? = null
 
     @Attribute("upload_path")
     var uploadPath: String? = null
 
     // selectedContainer is saved to reconstruct a containersModel when we reopen the project
     @Attribute("selected_container")
-    var selectedContainer: String? = null
+    override var selectedContainer: String? = null
+
+    @Attribute("selected_subscription")
+    override var selectedSubscription: String? = null
 
     @Attribute("storage_account_type")
-    var storageAccountType: SparkSubmitStorageType = SparkSubmitStorageType.DEFAULT_STORAGE_ACCOUNT
+    override var storageAccountType: SparkSubmitStorageType? = null
 
-    @Transient var errorMsg: String? = SparkSubmissionJobUploadStoragePanel().notFinishCheckMessage
+    @get:Transient @set:Transient
+    override var errorMsg: String? = null
+
+    // model for ADLS Gen 1 storage type
+    @Attribute("adl_root_path")
+    override var adlsRootPath: String? = null
+
+    // model for webhdfs  type
+    @Attribute("webhdfs_root_path")
+    override var webHdfsRootPath: String? = null
+}
+
+fun SparkSubmitStorageType.getSecureStoreServiceOf(account: String?): String? {
+    if (account.isNullOrBlank()) {
+        return null
+    }
+
+    return when (this) {
+        SparkSubmitStorageType.BLOB -> "Azure IntelliJ Plugin Job Upload Storage Azure Blob - $account"
+        SparkSubmitStorageType.ADLS_GEN2 -> "Azure IntelliJ Plugin Job Upload Storage Azure ADLSGen2 - $account"
+        else -> null
+    }
 }

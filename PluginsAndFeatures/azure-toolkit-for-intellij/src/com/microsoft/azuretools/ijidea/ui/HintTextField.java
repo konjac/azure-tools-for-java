@@ -1,59 +1,33 @@
+/*
+ * Copyright (c) Microsoft Corporation
+ *
+ * All rights reserved.
+ *
+ * MIT License
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+ * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
+ * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
+ * the Software.
+ *
+ * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 package com.microsoft.azuretools.ijidea.ui;
 
-import com.intellij.util.ui.UIUtil;
+import com.intellij.ui.components.JBTextField;
+import org.jetbrains.annotations.NotNull;
 
-import javax.swing.*;
-import java.awt.*;
-import java.awt.event.FocusEvent;
-import java.awt.event.FocusListener;
-
-/**
- * Created by vlashch on 2/13/17.
- */
-public class HintTextField extends JTextField implements FocusListener {
-
-    private final String hint;
-    private boolean showingHint;
-
-    public HintTextField(final String hint) {
-        super(hint);
-        super.setForeground(Color.GRAY);
-        setText(hint);
-        this.hint = hint;
-        this.showingHint = true;
-        super.addFocusListener(this);
-    }
-
-    @Override
-    public void focusGained(FocusEvent e) {
-        if(this.getText().isEmpty()) {
-            if (UIUtil.isUnderDarcula()) {
-                super.setForeground(new Color(187, 187, 187));
-            } else {
-                super.setForeground(Color.BLACK);
-            }
-            showingHint = false;
-            super.setText("");
-        }
-    }
-    @Override
-    public void focusLost(FocusEvent e) {
-        if(this.getText().isEmpty()) {
-            super.setForeground(Color.GRAY);
-            showingHint = true;
-            super.setText(hint);
-        }
-    }
-
-    @Override
-    public String getText() {
-        return showingHint ? "" : super.getText();
-    }
-
-    @Override
-    public void setText(String t) {
-        if (t == null || t.isEmpty()) return;
-        super.setText(t);
-        showingHint = false;
+public class HintTextField extends JBTextField {
+    public HintTextField(@NotNull String hint) {
+        super();
+        getEmptyText().setText(hint);
     }
 }

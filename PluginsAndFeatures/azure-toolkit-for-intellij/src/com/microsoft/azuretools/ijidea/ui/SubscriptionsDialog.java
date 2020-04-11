@@ -1,23 +1,23 @@
 /*
  * Copyright (c) Microsoft Corporation
- *   <p/>
- *  All rights reserved.
- *   <p/>
- *  MIT License
- *   <p/>
- *  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
- *  documentation files (the "Software"), to deal in the Software without restriction, including without limitation
- *  the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
- *  to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- *  <p/>
- *  The above copyright notice and this permission notice shall be included in all copies or substantial portions of
- *  the Software.
- *   <p/>
- *  THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- *  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
- *  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- *  SOFTWARE.
+ *
+ * All rights reserved.
+ *
+ * MIT License
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+ * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
+ * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
+ * the Software.
+ *
+ * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
 
 package com.microsoft.azuretools.ijidea.ui;
@@ -36,22 +36,22 @@ import com.microsoft.azuretools.authmanage.models.SubscriptionDetail;
 import com.microsoft.azuretools.ijidea.actions.SelectSubscriptionsAction;
 import com.microsoft.azuretools.sdkmanage.AzureManager;
 import com.microsoft.azuretools.telemetry.AppInsightsClient;
+import com.microsoft.azuretools.telemetrywrapper.EventType;
+import com.microsoft.azuretools.telemetrywrapper.EventUtil;
 import com.microsoft.intellij.ui.components.AzureDialogWrapper;
-
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableColumn;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.List;
 
-import javax.swing.Action;
-import javax.swing.JComponent;
-import javax.swing.JOptionPane;
-import javax.swing.JPanel;
-import javax.swing.JTable;
-import javax.swing.table.DefaultTableModel;
-import javax.swing.table.TableColumn;
+import static com.microsoft.azuretools.telemetry.TelemetryConstants.ACCOUNT;
+import static com.microsoft.azuretools.telemetry.TelemetryConstants.GET_SUBSCRIPTIONS;
+import static com.microsoft.azuretools.telemetry.TelemetryConstants.SELECT_SUBSCRIPTIONS;
 
 public class SubscriptionsDialog extends AzureDialogWrapper {
     private static final int CHECKBOX_COLUMN = 0;
@@ -99,7 +99,7 @@ public class SubscriptionsDialog extends AzureDialogWrapper {
     }
 
     private void refreshSubscriptions() {
-        try {
+        EventUtil.executeWithLog(ACCOUNT, GET_SUBSCRIPTIONS, (operation) -> {
             AzureManager manager = AuthMethodManager.getInstance().getAzureManager();
             if (manager == null) {
                 return;
@@ -119,11 +119,11 @@ public class SubscriptionsDialog extends AzureDialogWrapper {
             // to notify subscribers
             subscriptionManager.setSubscriptionDetails(sdl);
 
-        } catch (Exception ex) {
+        }, (ex) -> {
             ex.printStackTrace();
             //LOGGER.error("refreshSubscriptions", ex);
             ErrorWindow.show(project, ex.getMessage(), "Refresh Subscriptions Error");
-        }
+        });
     }
 
     private void setSubscriptions() {
@@ -136,17 +136,16 @@ public class SubscriptionsDialog extends AzureDialogWrapper {
 
     private void createUIComponents() {
         DefaultTableModel model = new SubscriptionTableModel();
-        model.addColumn(""); // TODO: name for 'select/deselect all'
+        model.addColumn("Selected"); // Set the text read by JAWS
         model.addColumn("Subscription name");
         model.addColumn("Subscription ID");
 
         table = new JBTable();
         table.setModel(model);
         TableColumn column = table.getColumnModel().getColumn(CHECKBOX_COLUMN);
+        column.setHeaderValue(""); // Don't show title text
         column.setMinWidth(23);
         column.setMaxWidth(23);
-        table.setRowSelectionAllowed(false);
-        table.setCellSelectionEnabled(false);
         table.getTableHeader().setReorderingAllowed(false);
 
         // secret functionality: select all subs
@@ -195,6 +194,7 @@ public class SubscriptionsDialog extends AzureDialogWrapper {
 
     @Override
     protected void doOKAction() {
+        EventUtil.logEvent(EventType.info, ACCOUNT, SELECT_SUBSCRIPTIONS, null);
         DefaultTableModel model = (DefaultTableModel) table.getModel();
         int rc = model.getRowCount();
         int unselectedCount = 0;

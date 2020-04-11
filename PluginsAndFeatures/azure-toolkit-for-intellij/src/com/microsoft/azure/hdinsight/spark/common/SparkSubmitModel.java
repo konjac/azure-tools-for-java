@@ -1,24 +1,25 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
- * <p/>
+ *
  * All rights reserved.
- * <p/>
+ *
  * MIT License
- * <p/>
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
  * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- * <p/>
+ *
  * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
  * the Software.
- * <p/>
+ *
  * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
 package com.microsoft.azure.hdinsight.spark.common;
 
 import com.intellij.openapi.command.impl.DummyProject;
@@ -29,14 +30,14 @@ import com.intellij.packaging.artifacts.Artifact;
 import com.intellij.packaging.artifacts.ArtifactManager;
 import com.intellij.util.xmlb.XmlSerializer;
 import com.intellij.util.xmlb.annotations.*;
-import com.microsoft.azure.hdinsight.sdk.cluster.IClusterDetail;
 import com.microsoft.azuretools.azurecommons.helpers.NotNull;
+import com.microsoft.azuretools.azurecommons.helpers.Nullable;
 import com.microsoft.azuretools.utils.Pair;
 import org.jdom.Element;
 
-import javax.swing.*;
-import javax.swing.event.TableModelEvent;
-import java.util.*;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -47,25 +48,28 @@ public class SparkSubmitModel {
 
     @Transient
     @NotNull
-    final private Project project;
+    private Project project;
 
     @Transient
     @NotNull
     private SparkSubmissionParameter submissionParameter; // The parameters to packing submission related various
 
-    @NotNull
-    @Property(surroundWithTag = false)
-    final private SparkSubmitAdvancedConfigModel advancedConfigModel;
+    @Nullable
+    private String clusterMappedId;
 
     @NotNull
     @Property(surroundWithTag = false)
-    final private SparkSubmitJobUploadStorageModel jobUploadStorageModel;
+    private final SparkSubmitAdvancedConfigModel advancedConfigModel;
+
+    @NotNull
+    @Property(surroundWithTag = false)
+    private final SparkSubmitJobUploadStorageModel jobUploadStorageModel;
 
     @Transient
-    private DefaultComboBoxModel<IClusterDetail> clusterComboBoxModel;
+    private boolean isClusterSelectable = true;
 
     @Transient
-    private DefaultComboBoxModel<Artifact> artifactComboBoxModel;
+    private boolean isClustersRefreshable = true;
 
     @Transient
     @NotNull
@@ -80,11 +84,15 @@ public class SparkSubmitModel {
     }
 
     public SparkSubmitModel(@NotNull Project project, @NotNull SparkSubmissionParameter submissionParameter) {
+        this(project, submissionParameter, new SparkSubmitAdvancedConfigModel(), new SparkSubmitJobUploadStorageModel());
+    }
+
+    public SparkSubmitModel(@NotNull Project project, @NotNull SparkSubmissionParameter submissionParameter,
+                            @NotNull SparkSubmitAdvancedConfigModel advancedConfigModel,
+                            @NotNull SparkSubmitJobUploadStorageModel jobUploadStorageModel) {
         this.project = project;
-        this.clusterComboBoxModel = new DefaultComboBoxModel<>();
-        this.artifactComboBoxModel = new DefaultComboBoxModel<>();
-        this.advancedConfigModel = new SparkSubmitAdvancedConfigModel();
-        this.jobUploadStorageModel = new SparkSubmitJobUploadStorageModel();
+        this.advancedConfigModel = advancedConfigModel;
+        this.jobUploadStorageModel = jobUploadStorageModel;
         this.submissionParameter = submissionParameter;
 
         setTableModel(new SubmissionTableModel(submissionParameter.flatJobConfig()));
@@ -105,15 +113,33 @@ public class SparkSubmitModel {
     }
 
     @Transient
-    @NotNull
-    public DefaultComboBoxModel<IClusterDetail> getClusterComboBoxModel() {
-        return clusterComboBoxModel;
+    public boolean isClusterSelectable() {
+        return isClusterSelectable;
     }
 
     @Transient
-    @NotNull
-    public DefaultComboBoxModel<Artifact> getArtifactComboBoxModel() {
-        return artifactComboBoxModel;
+    public void setClusterSelectable(boolean clusterSelectable) {
+        isClusterSelectable = clusterSelectable;
+    }
+
+    @Transient
+    public boolean isClustersRefreshable() {
+        return isClustersRefreshable;
+    }
+
+    @Transient
+    public void setClustersRefreshable(boolean clustersRefreshable) {
+        isClustersRefreshable = clustersRefreshable;
+    }
+
+    @Attribute("job_name")
+    public String getJobName() {
+        return getSubmissionParameter().getName();
+    }
+
+    @Attribute("job_name")
+    public void setJobName(String jobName) {
+        getSubmissionParameter().setName(jobName);
     }
 
     @Attribute("cluster_name")
@@ -124,6 +150,16 @@ public class SparkSubmitModel {
     @Attribute("cluster_name")
     public void setClusterName(String clusterName) {
         getSubmissionParameter().setClusterName(clusterName);
+    }
+
+    @Attribute("cluster_mapped_id")
+    public String getClusterMappedId() {
+        return clusterMappedId;
+    }
+
+    @Attribute("cluster_mapped_id")
+    public void setClusterMappedId(String clusterMappedId) {
+        this.clusterMappedId = clusterMappedId;
     }
 
     @Attribute("is_local_artifact")
@@ -155,6 +191,7 @@ public class SparkSubmitModel {
     public void setLocalArtifactPath(String localArtifactPath) {
         getSubmissionParameter().setLocalArtifactPath(localArtifactPath);
     }
+
     @Attribute("file_path")
     public String getFilePath() {
         return getSubmissionParameter().getFile();
@@ -249,6 +286,11 @@ public class SparkSubmitModel {
         return project;
     }
 
+    @Transient
+    public void setProject(@NotNull Project project) {
+        this.project = project;
+    }
+
     @NotNull
     @Transient
     public SubmissionTableModel getTableModel() {
@@ -257,10 +299,8 @@ public class SparkSubmitModel {
 
     @Transient
     public synchronized void setTableModel(@NotNull SubmissionTableModel tableModel) {
-        initializeTableModel(tableModel);
-
         // Apply from table model
-        submissionParameter.applyFlattedJobConf(tableModel.getJobConfigMap());
+        getSubmissionParameter().applyFlattedJobConf(tableModel.getJobConfigMap());
 
         this.tableModel = tableModel;
     }
@@ -276,24 +316,8 @@ public class SparkSubmitModel {
 
     @NotNull
     @Transient
-    protected Stream<Pair<String, ? extends Object>> getDefaultParameters() {
+    public Stream<Pair<String, ? extends Object>> getDefaultParameters() {
         return Arrays.stream(SparkSubmissionParameter.defaultParameters);
-    }
-
-    private void initializeTableModel(final SubmissionTableModel tableModel) {
-        if (tableModel.getJobConfigMap().isEmpty()) {
-            tableModel.loadJobConfigMap(getDefaultParameters()
-                                            .map(kv -> new Pair<>(kv.first(), kv.second() == null ? "" : kv.second().toString()))
-                                            .collect(Collectors.toList()));
-        }
-
-        tableModel.addTableModelListener(e -> {
-            if (e.getType() == TableModelEvent.UPDATE &&
-                    (e.getLastRow() + 1) == getTableModel().getRowCount() &&
-                    (!getTableModel().hasEmptyRow())) {
-                tableModel.addEmptyRow();
-            }
-        });
     }
 
     public Element exportToElement() throws WriteExternalException {
@@ -312,5 +336,11 @@ public class SparkSubmitModel {
         }
 
         return this;
+    }
+
+    @NotNull
+    @Transient
+    public String getSparkClusterTypeDisplayName() {
+        return "HDInsight cluster";
     }
 }

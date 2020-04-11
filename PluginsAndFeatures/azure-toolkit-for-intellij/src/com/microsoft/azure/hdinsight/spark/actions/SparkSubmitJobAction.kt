@@ -23,36 +23,53 @@
 package com.microsoft.azure.hdinsight.spark.actions
 
 import com.intellij.execution.ExecutorRegistry
-import com.intellij.execution.ProgramRunnerUtil
 import com.intellij.execution.RunnerAndConfigurationSettings
 import com.intellij.execution.actions.ConfigurationContext
+import com.intellij.execution.runners.ExecutionEnvironmentBuilder
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DataContext
+import com.intellij.openapi.actionSystem.ex.ActionManagerEx
+import com.microsoft.azure.hdinsight.sdk.cluster.IClusterDetail
 import com.microsoft.azure.hdinsight.spark.actions.SparkDataKeys.*
 import com.microsoft.azure.hdinsight.spark.run.SparkBatchJobRunExecutor
-import com.microsoft.azure.hdinsight.spark.run.configuration.*
+import com.microsoft.azure.hdinsight.spark.run.action.RunConfigurationActionUtils
+import com.microsoft.azure.hdinsight.spark.run.action.SelectSparkApplicationTypeAction
+import com.microsoft.azure.hdinsight.spark.run.action.SeqActions
+import com.microsoft.azure.hdinsight.spark.run.action.SparkApplicationType
+import com.microsoft.azure.hdinsight.spark.run.configuration.LivySparkBatchJobRunConfiguration
 import com.microsoft.azuretools.ijidea.utility.AzureAnAction
+import com.microsoft.azuretools.telemetry.TelemetryConstants
+import com.microsoft.azuretools.telemetrywrapper.Operation
+import com.microsoft.intellij.telemetry.TelemetryKeys
 
-class SparkSubmitJobAction : AzureAnAction() {
-    override fun onActionPerformed(anActionEvent: AnActionEvent?) {
-        if (anActionEvent == null) {
-            return
+
+open class SparkSubmitJobAction : AzureAnAction() {
+    open fun submitWithPopupMenu(anActionEvent: AnActionEvent) : Boolean {
+        return if (SelectSparkApplicationTypeAction.getSelectedSparkApplicationType() == SparkApplicationType.None) {
+            val action = ActionManagerEx.getInstance().getAction("Actions.SparkSubmitJobActionGroups")
+            action?.actionPerformed(anActionEvent)
+            true
+        } else {
+            false
+        }
+    }
+
+    override fun onActionPerformed(anActionEvent: AnActionEvent, operation: Operation?): Boolean {
+        if (submitWithPopupMenu(anActionEvent)) {
+            return true
         }
 
         val runConfigurationSetting = anActionEvent.dataContext.getData(RUN_CONFIGURATION_SETTING) ?:
-                getRunConfigurationFromDataContext(anActionEvent.dataContext) ?: return
-        val clusterName = anActionEvent.dataContext.getData(CLUSTER)?.name
+                getRunConfigurationFromDataContext(anActionEvent.dataContext) ?: return true
+        val cluster = anActionEvent.dataContext.getData(CLUSTER)
         val mainClassName = anActionEvent.dataContext.getData(MAIN_CLASS_NAME)
 
-        submit(runConfigurationSetting, clusterName, mainClassName)
+        submit(runConfigurationSetting, cluster, mainClassName, operation)
+        return false
     }
 
-    override fun update(event: AnActionEvent?) {
+    override fun update(event: AnActionEvent) {
         super.update(event)
-
-        if (event == null) {
-            return
-        }
 
         event.presentation.isEnabledAndVisible = getRunConfigurationFromDataContext(event.dataContext) != null
     }
@@ -60,20 +77,26 @@ class SparkSubmitJobAction : AzureAnAction() {
     private fun getRunConfigurationFromDataContext(dataContext: DataContext): RunnerAndConfigurationSettings? {
         val configContext = ConfigurationContext.getFromContext(dataContext)
 
-        return configContext.findExisting() ?: configContext.configuration
+        val existingConfig = configContext.findExisting()
+        return if (existingConfig != null && existingConfig is LivySparkBatchJobRunConfiguration) existingConfig else configContext.configuration
     }
 
-    private fun submit(runConfigurationSetting: RunnerAndConfigurationSettings, clusterName: String?, mainClassName: String?) {
+    private fun submit(runConfigurationSetting: RunnerAndConfigurationSettings,
+                       cluster: IClusterDetail?,
+                       mainClassName: String?,
+                       operation: Operation?) {
         val executor = ExecutorRegistry.getInstance().getExecutorById(SparkBatchJobRunExecutor.EXECUTOR_ID)
 
         runConfigurationSetting.isEditBeforeRun = true
 
-        val runConfiguration = runConfigurationSetting.configuration as RemoteDebugRunConfiguration
+        val runConfiguration = runConfigurationSetting.configuration as? LivySparkBatchJobRunConfiguration ?: return
         val model = runConfiguration.model
         model.focusedTabIndex = 1   // Select remote job submission tab
 
+        val clusterName = cluster?.name
         if (clusterName != null) {
             model.submitModel.submissionParameter.clusterName = clusterName     // Select the cluster
+            model.submitModel.clusterMappedId = cluster.clusterIdForConfiguration
             model.isClusterSelectionEnabled = false
         } else {
             model.isClusterSelectionEnabled = true
@@ -85,7 +108,11 @@ class SparkSubmitJobAction : AzureAnAction() {
 
         model.isLocalRunConfigEnabled = false   // Disable local run configuration tab
 
-        ProgramRunnerUtil.executeConfiguration(runConfigurationSetting, executor)
+        val environment = ExecutionEnvironmentBuilder.create(executor, runConfigurationSetting).build()
+        environment.putUserData(TelemetryKeys.OPERATION, operation)
+
+        RunConfigurationActionUtils.runEnvironmentProfileWithCheckSettings(
+                environment, "Edit Spark Job submission run configuration")
 
         // Restore for common run configuration editor
         runConfigurationSetting.isEditBeforeRun = false
@@ -94,4 +121,18 @@ class SparkSubmitJobAction : AzureAnAction() {
             model.isClusterSelectionEnabled = true
         }
     }
+
+    override fun getServiceName(event: AnActionEvent): String? {
+        return SelectSparkApplicationTypeAction.getSelectedSparkApplicationType().value
+    }
+
+    override fun getOperationName(event: AnActionEvent?): String {
+        return TelemetryConstants.RUN_REMOTE_SPARK_JOB
+    }
 }
+
+class LivySparkSelectAndSubmitAction : SeqActions("Actions.SelectHDInsightSparkType", "Actions.SubmitSparkApplicationAction")
+class CosmosSparkSelectAndSubmitAction : SeqActions("Actions.SelectCosmosSparkType", "Actions.SubmitSparkApplicationAction")
+class CosmosServerlessSparkSelectAndSubmitAction : SeqActions("Actions.SelectCosmosServerlessSparkType", "Actions.SubmitSparkApplicationAction")
+class ArisSparkSelectAndSubmitAction : SeqActions("Actions.SelectArisSparkType", "Actions.SubmitSparkApplicationAction")
+class ArcadiaSparkSelectAndSubmitAction : SeqActions("Actions.SelectArcadiaSparkType", "Actions.SubmitSparkApplicationAction")

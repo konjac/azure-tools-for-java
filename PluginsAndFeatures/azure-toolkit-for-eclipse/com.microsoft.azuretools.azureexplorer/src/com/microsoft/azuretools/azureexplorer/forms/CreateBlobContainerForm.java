@@ -1,24 +1,32 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
- * 
- * All rights reserved. 
- * 
+ *
+ * All rights reserved.
+ *
  * MIT License
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files 
- * (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, 
- * publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, 
- * subject to the following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR 
- * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH 
- * THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+ * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
+ * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
+ * the Software.
+ *
+ * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
+
 package com.microsoft.azuretools.azureexplorer.forms;
 
+import static com.microsoft.azuretools.telemetry.TelemetryConstants.CREATE_BLOB_CONTAINER;
+import static com.microsoft.azuretools.telemetry.TelemetryConstants.STORAGE;
+
+import com.microsoft.azuretools.telemetry.TelemetryConstants;
+import com.microsoft.azuretools.telemetrywrapper.EventUtil;
 import com.microsoft.tooling.msservices.components.DefaultLoader;
 import com.microsoft.azuretools.authmanage.models.SubscriptionDetail;
 import com.microsoft.azuretools.azurecommons.helpers.AzureCmdException;
@@ -94,10 +102,10 @@ public class CreateBlobContainerForm extends AzureDialogWrapper {
                 try {
                     PlatformUI.getWorkbench().getBrowserSupport().getExternalBrowser().openURL(new URL(event.text));
                 } catch (Exception ex) {
-					/*
-					 * only logging the error in log file
-					 * not showing anything to end user
-					 */
+                    /*
+                     * only logging the error in log file
+                     * not showing anything to end user
+                     */
                     Activator.getDefault().log("Error occurred while opening link in default browser.", ex);
                 }
             }
@@ -141,52 +149,48 @@ public class CreateBlobContainerForm extends AzureDialogWrapper {
             return;
         }
 
-        DefaultLoader.getIdeHelper().runInBackground(null, "Creating blob container...", false, true, "Creating blob container...",
-                new Runnable() {
-                    @Override
-                    public void run() {
-                        try {
-                            for (BlobContainer blobContainer : StorageClientSDKManager.getManager().getBlobContainers(connectionString)) {
-                                if (blobContainer.getName().equals(name)) {
-                                    DefaultLoader.getIdeHelper().invokeLater(new Runnable() {
-                                        @Override
-                                        public void run() {
-                                            DefaultLoader.getUIHelper().showError("A blob container with the specified name already exists.", "Azure Explorer");
-                                        }
-                                    });
-
-                                    return;
-                                }
+        DefaultLoader.getIdeHelper().runInBackground(null, "Creating blob container...",
+            false, true, "Creating blob container...", () ->
+                EventUtil.executeWithLog(STORAGE, CREATE_BLOB_CONTAINER, (operation) -> {
+                        for (BlobContainer blobContainer : StorageClientSDKManager.getManager()
+                            .getBlobContainers(connectionString)) {
+                            if (blobContainer.getName().equals(name)) {
+                                DefaultLoader.getIdeHelper().invokeLater(() ->
+                                    DefaultLoader.getUIHelper().showError("A blob container with the specified"
+                                        + " name already exists.", "Azure Explorer")
+                                );
+                                return;
                             }
-                            BlobContainer blobContainer = new BlobContainer(name, ""/*storageAccount.getBlobsUri() + name*/, "", Calendar.getInstance(), "");
-                            StorageClientSDKManager.getManager().createBlobContainer(connectionString, blobContainer);
-
-                            if (onCreate != null) {
-                                DefaultLoader.getIdeHelper().invokeLater(onCreate);
-                            }
-                        } catch (AzureCmdException e) {
-                            DefaultLoader.getUIHelper().showException("Error creating blob container", e, "Error creating blob container", false, true);
                         }
-                    }
-                });
+                        BlobContainer blobContainer = new BlobContainer(name,
+                            ""/*storageAccount.getBlobsUri() + name*/, "", Calendar.getInstance(), "");
+                        StorageClientSDKManager.getManager().createBlobContainer(connectionString, blobContainer);
+                        if (onCreate != null) {
+                            DefaultLoader.getIdeHelper().invokeLater(onCreate);
+                        }
+                    }, (e) ->
+                        DefaultLoader.getUIHelper().showException("Error creating blob container",
+                            e, "Error creating blob container", false, true)
+                )
+        );
         super.okPressed();
     }
 
     public void setOnCreate(Runnable onCreate) {
         this.onCreate = onCreate;
     }
-    
+
     public SubscriptionDetail getSubscription() {
-		return subscription;
-	}
-	
-	public void setSubscription(SubscriptionDetail subscription) {
-		this.subscription = subscription;
-	}
-	
-	@Override
-	public Map<String, String> toProperties() {
-		final Map<String, String> properties = new HashMap<>();
+        return subscription;
+    }
+
+    public void setSubscription(SubscriptionDetail subscription) {
+        this.subscription = subscription;
+    }
+
+    @Override
+    public Map<String, String> toProperties() {
+        final Map<String, String> properties = new HashMap<>();
 
         if (this.getSubscription() != null) {
             if(this.getSubscription().getSubscriptionName() != null)  properties.put("SubscriptionName", this.getSubscription().getSubscriptionName());
@@ -194,5 +198,5 @@ public class CreateBlobContainerForm extends AzureDialogWrapper {
         }
 
         return properties;
-	}
+    }
 }

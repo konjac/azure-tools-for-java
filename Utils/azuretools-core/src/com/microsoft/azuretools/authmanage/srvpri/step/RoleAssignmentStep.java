@@ -1,23 +1,23 @@
 /*
  * Copyright (c) Microsoft Corporation
- *   <p/>
- *  All rights reserved.
- *   <p/>
- *  MIT License
- *   <p/>
- *  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
- *  documentation files (the "Software"), to deal in the Software without restriction, including without limitation
- *  the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
- *  to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- *  <p/>
- *  The above copyright notice and this permission notice shall be included in all copies or substantial portions of
- *  the Software.
- *   <p/>
- *  THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- *  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
- *  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- *  SOFTWARE.
+ *
+ * All rights reserved.
+ *
+ * MIT License
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+ * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
+ * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
+ * the Software.
+ *
+ * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
 
 package com.microsoft.azuretools.authmanage.srvpri.step;
@@ -29,6 +29,7 @@ import com.microsoft.azuretools.authmanage.srvpri.entities.RoleDefinitionRet;
 import com.microsoft.azuretools.authmanage.srvpri.exceptions.AzureException;
 import com.microsoft.azuretools.authmanage.srvpri.report.Reporter;
 import com.microsoft.azuretools.authmanage.srvpri.rest.ArmRestHelper;
+import com.microsoft.azuretools.sdkmanage.AccessTokenAzureManager;
 import com.microsoft.azuretools.utils.Pair;
 import org.codehaus.jackson.map.ObjectMapper;
 
@@ -45,12 +46,17 @@ public class RoleAssignmentStep implements IStep {
     private ArmRestHelper armRestHelper;
     private Reporter<String> reporter;
     private List<Pair<String, String>> roleAssignmentNames = new LinkedList<>();
+    private final AccessTokenAzureManager preAccessTokenAzureManager;
+
+    public RoleAssignmentStep(AccessTokenAzureManager preAccessTokenAzureManager) {
+        this.preAccessTokenAzureManager = preAccessTokenAzureManager;
+    }
 
     @Override
     public void execute(Map<String, Object> params) throws IOException, InterruptedException {
         String roleDefinitionName = "Contributor";
         String tenantId = CommonParams.getTenantId();
-        armRestHelper = new ArmRestHelper(tenantId);
+        armRestHelper = new ArmRestHelper(preAccessTokenAzureManager, tenantId);
         UUID spObjectId = (UUID)params.get("spObjectId");
 
         reporter = CommonParams.getReporter();

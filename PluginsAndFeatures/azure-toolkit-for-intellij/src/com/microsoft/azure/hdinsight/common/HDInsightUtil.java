@@ -1,24 +1,25 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
- * <p/>
+ *
  * All rights reserved.
- * <p/>
+ *
  * MIT License
- * <p/>
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
  * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- * <p/>
+ *
  * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
  * the Software.
- * <p/>
+ *
  * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
 package com.microsoft.azure.hdinsight.common;
 
 
@@ -27,22 +28,18 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowManager;
 import com.microsoft.azure.hdinsight.serverexplore.HDInsightRootModuleImpl;
-import com.microsoft.azuretools.telemetry.AppInsightsClient;
 import com.microsoft.intellij.ToolWindowKey;
-import com.microsoft.intellij.hdinsight.messages.HDInsightBundle;
-import com.microsoft.intellij.util.PluginUtil;
-import com.microsoft.azuretools.azurecommons.helpers.AzureCmdException;
-import com.microsoft.tooling.msservices.components.DefaultLoader;
-import com.microsoft.tooling.msservices.serviceexplorer.NodeActionEvent;
-import com.microsoft.tooling.msservices.serviceexplorer.NodeActionListener;
-import com.microsoft.tooling.msservices.serviceexplorer.azure.AzureModule;
 import com.microsoft.intellij.common.CommonConst;
+import com.microsoft.intellij.util.PluginUtil;
+import com.microsoft.tooling.msservices.components.DefaultLoader;
+import com.microsoft.tooling.msservices.serviceexplorer.azure.AzureModule;
 import org.jetbrains.annotations.NotNull;
 import rx.subjects.ReplaySubject;
 
 import java.util.AbstractMap.SimpleImmutableEntry;
 import java.util.Optional;
 
+import static com.microsoft.azure.hdinsight.common.MessageInfoType.Error;
 import static com.microsoft.azure.hdinsight.common.MessageInfoType.*;
 
 public class HDInsightUtil {
@@ -59,15 +56,10 @@ public class HDInsightUtil {
     }
 
     public static void setHDInsightRootModule(@NotNull AzureModule azureModule) {
-        HDInsightRootModuleImpl hdInsightRootModule =  new HDInsightRootModuleImpl(azureModule);
-
-        // add telemetry for HDInsight Node
-        hdInsightRootModule.addClickActionListener(new NodeActionListener() {
-            @Override
-            protected void actionPerformed(NodeActionEvent e) throws AzureCmdException {
-                AppInsightsClient.create(HDInsightBundle.message("HDInsightExplorerHDInsightNodeExpand"), null);
-            }
-        });
+        // Enable HDInsight new SDK for IntelliJ
+        DefaultLoader.getIdeHelper().setApplicationProperty(
+                com.microsoft.azure.hdinsight.common.CommonConst.ENABLE_HDINSIGHT_NEW_SDK, "true");
+        HDInsightRootModuleImpl hdInsightRootModule = new HDInsightRootModuleImpl(azureModule);
 
         azureModule.setHdInsightModule(hdInsightRootModule);
     }
@@ -122,7 +114,6 @@ public class HDInsightUtil {
         if(!PluginUtil.isContainsToolWindowKey(key)) {
             SparkSubmissionToolWindowProcessor sparkSubmissionToolWindowProcessor = new SparkSubmissionToolWindowProcessor(toolWindow);
             PluginUtil.registerToolWindowManager(key, sparkSubmissionToolWindowProcessor);
-
 
             // make sure tool window process initialize on swing dispatch
             if(ApplicationManager.getApplication().isDispatchThread()) {

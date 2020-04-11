@@ -1,24 +1,25 @@
 /*
  * Copyright (c) Microsoft Corporation
- *   <p/>
- *  All rights reserved.
- *   <p/>
- *  MIT License
- *   <p/>
- *  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
- *  documentation files (the "Software"), to deal in the Software without restriction, including without limitation
- *  the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
- *  to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- *  <p/>
- *  The above copyright notice and this permission notice shall be included in all copies or substantial portions of
- *  the Software.
- *   <p/>
- *  THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- *  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
- *  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- *  SOFTWARE.
+ *
+ * All rights reserved.
+ *
+ * MIT License
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+ * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
+ * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
+ * the Software.
+ *
+ * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
+
 package com.microsoft.azuretools.ijidea.actions;
 
 import com.intellij.openapi.actionSystem.AnActionEvent;
@@ -36,8 +37,13 @@ import com.microsoft.azuretools.ijidea.ui.ErrorWindow;
 import com.microsoft.azuretools.ijidea.ui.SubscriptionsDialog;
 import com.microsoft.azuretools.ijidea.utility.AzureAnAction;
 import com.microsoft.azuretools.sdkmanage.AzureManager;
+import com.microsoft.azuretools.telemetry.TelemetryConstants;
+import com.microsoft.azuretools.telemetrywrapper.EventUtil;
+import com.microsoft.azuretools.telemetrywrapper.Operation;
 import com.microsoft.intellij.helpers.UIHelperImpl;
 import com.microsoft.intellij.serviceexplorer.azure.ManageSubscriptionsAction;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.util.List;
@@ -49,15 +55,16 @@ public class SelectSubscriptionsAction extends AzureAnAction {
     }
 
     @Override
-    public void onActionPerformed(AnActionEvent e) {
+    public boolean onActionPerformed(@NotNull AnActionEvent e, @Nullable Operation operation) {
         Project project = DataKeys.PROJECT.getData(e.getDataContext());
         onShowSubscriptions(project);
+        return true;
     }
 
     public static void onShowSubscriptions(Project project) {
         JFrame frame = WindowManager.getInstance().getFrame(project);
 
-        try {
+        EventUtil.executeWithLog(TelemetryConstants.ACCOUNT, TelemetryConstants.GET_SUBSCRIPTIONS, (operation) -> {
             //Project project = ProjectManager.getInstance().getDefaultProject();();
 
             AzureManager manager = AuthMethodManager.getInstance().getAzureManager();
@@ -80,15 +87,15 @@ public class SelectSubscriptionsAction extends AzureAnAction {
                 subscriptionDetailsUpdated = d.getSubscriptionDetails();
                 subscriptionManager.setSubscriptionDetails(subscriptionDetailsUpdated);
             }
-        } catch (Exception ex) {
+        }, (ex) -> {
             ex.printStackTrace();
             //LOGGER.error("onShowSubscriptions", ex);
             ErrorWindow.show(project, ex.getMessage(), "Select Subscriptions Action Error");
-        }
+        });
     }
 
     @Override
-    public  void update(AnActionEvent e) {
+    public void update(AnActionEvent e) {
         try {
             boolean isSignIn = AuthMethodManager.getInstance().isSignedIn();
             e.getPresentation().setEnabled(isSignIn);
@@ -109,7 +116,8 @@ public class SelectSubscriptionsAction extends AzureAnAction {
                     subscriptionManager.getSubscriptionDetails();
                 } catch (Exception ex) {
                     ex.printStackTrace();
-                    LOGGER.error("updateSubscriptionWithProgressDialog", ex);
+                    // Don't handle subscription exception there.
+                    // LOGGER.error("updateSubscriptionWithProgressDialog", ex);
                 }
             }
         });

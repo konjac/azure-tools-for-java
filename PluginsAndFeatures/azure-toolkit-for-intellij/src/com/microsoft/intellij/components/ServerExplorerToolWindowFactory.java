@@ -22,19 +22,24 @@
 
 package com.microsoft.intellij.components;
 
+import com.google.common.collect.ImmutableList;
 import com.intellij.ide.util.treeView.NodeRenderer;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.project.ProjectManager;
+import com.intellij.openapi.project.ProjectManagerListener;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowFactory;
 import com.intellij.openapi.wm.ex.ToolWindowEx;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.treeStructure.Tree;
+import com.microsoft.azure.arcadia.serverexplore.ArcadiaSparkClusterRootModuleImpl;
+import com.microsoft.azure.cosmosspark.serverexplore.cosmossparknode.CosmosSparkClusterRootModuleImpl;
 import com.microsoft.azure.hdinsight.common.HDInsightUtil;
-import com.microsoft.azure.sparkserverless.serverexplore.sparkserverlessnode.SparkServerlessClusterRootModuleImpl;
+import com.microsoft.azure.sqlbigdata.serverexplore.SqlBigDataClusterModule;
 import com.microsoft.azuretools.authmanage.AuthMethodManager;
 import com.microsoft.azuretools.ijidea.actions.AzureSignInAction;
 import com.microsoft.azuretools.ijidea.actions.SelectSubscriptionsAction;
@@ -72,6 +77,7 @@ import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class ServerExplorerToolWindowFactory implements ToolWindowFactory, PropertyChangeListener {
@@ -83,12 +89,14 @@ public class ServerExplorerToolWindowFactory implements ToolWindowFactory, Prope
     public void createToolWindowContent(@NotNull final Project project, @NotNull final ToolWindow toolWindow) {
         // initialize azure service module
         AzureModule azureModule = new AzureModuleImpl(project);
-
         HDInsightUtil.setHDInsightRootModule(azureModule);
-        azureModule.setSparkServerlessModule(new SparkServerlessClusterRootModuleImpl(azureModule));
+        azureModule.setSparkServerlessModule(new CosmosSparkClusterRootModuleImpl(azureModule));
+        azureModule.setArcadiaModule(new ArcadiaSparkClusterRootModuleImpl(azureModule));
+        // initialize aris service module
+        SqlBigDataClusterModule arisModule = new SqlBigDataClusterModule(project);
 
         // initialize with all the service modules
-        DefaultTreeModel treeModel = new DefaultTreeModel(initRoot(project, azureModule));
+        DefaultTreeModel treeModel = new DefaultTreeModel(initRoot(project, ImmutableList.of(azureModule, arisModule)));
         treeModelMap.put(project, treeModel);
 
         // initialize tree
@@ -148,18 +156,18 @@ public class ServerExplorerToolWindowFactory implements ToolWindowFactory, Prope
         azureModule.setTreePath(tree.getPathForRow(0));
 
         // setup toolbar icons
-        addToolbarItems(toolWindow, azureModule);
+        addToolbarItems(toolWindow, project, azureModule);
 
     }
 
-    private SortableTreeNode initRoot(Project project, AzureModule azureModule) {
+    private SortableTreeNode initRoot(Project project, List<RefreshableNode> nodes) {
         SortableTreeNode root = new SortableTreeNode();
 
-        // add the azure service root service module
-        root.add(createTreeNode(azureModule, project));
-
-        // kick-off asynchronous load of child nodes on all the modules
-        azureModule.load(false);
+        nodes.forEach(node -> {
+            root.add(createTreeNode(node, project));
+            // kick-off asynchronous load of child nodes on all the modules
+            node.load(false);
+        });
 
         return root;
     }
@@ -361,7 +369,7 @@ public class ServerExplorerToolWindowFactory implements ToolWindowFactory, Prope
         }
     }
 
-    private void addToolbarItems(ToolWindow toolWindow, final AzureModule azureModule) {
+    private void addToolbarItems(ToolWindow toolWindow, final Project project, final AzureModule azureModule) {
         if (toolWindow instanceof ToolWindowEx) {
             ToolWindowEx toolWindowEx = (ToolWindowEx) toolWindow;
             try {
@@ -389,6 +397,15 @@ public class ServerExplorerToolWindowFactory implements ToolWindowFactory, Prope
                 };
                 AuthMethodManager.getInstance().addSignInEventListener(forceRefreshTitleActions);
                 AuthMethodManager.getInstance().addSignOutEventListener(forceRefreshTitleActions);
+                // Remove the sign in/out listener when project close
+                ProjectManager.getInstance().addProjectManagerListener(project, new ProjectManagerListener() {
+                    @Override
+                    public void projectClosing(@NotNull Project project) {
+                        AuthMethodManager.getInstance().removeSignInEventListener(forceRefreshTitleActions);
+                        AuthMethodManager.getInstance().removeSignOutEventListener(forceRefreshTitleActions);
+                    }
+                });
+
                 forceRefreshTitleActions.run();
             } catch (Exception e) {
                 AzurePlugin.log(e.getMessage(), e);

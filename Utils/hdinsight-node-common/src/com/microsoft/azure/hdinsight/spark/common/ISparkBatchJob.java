@@ -1,18 +1,18 @@
 /*
  * Copyright (c) Microsoft Corporation
- * <p/>
+ *
  * All rights reserved.
- * <p/>
+ *
  * MIT License
- * <p/>
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
  * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- * <p/>
+ *
  * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
  * the Software.
- * <p/>
+ *
  * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
@@ -22,17 +22,17 @@
 
 package com.microsoft.azure.hdinsight.spark.common;
 
-import com.microsoft.azure.hdinsight.common.MessageInfoType;
-import com.microsoft.azuretools.azurecommons.helpers.NotNull;
 import rx.Observable;
 import rx.Observer;
 
-import java.io.IOException;
+import com.microsoft.azure.hdinsight.common.MessageInfoType;
+import com.microsoft.azuretools.azurecommons.helpers.NotNull;
+
 import java.net.URI;
-import java.net.URISyntaxException;
+import java.util.AbstractMap;
 import java.util.AbstractMap.SimpleImmutableEntry;
 
-public interface ISparkBatchJob {
+public interface ISparkBatchJob extends Cloneable {
     /**
      * Getter of the base connection URI for HDInsight Spark Job service
      *
@@ -79,7 +79,7 @@ public interface ISparkBatchJob {
      * @return the current instance observable for chain calling,
      *         Observable Error: IOException exceptions for networking connection issues related
      */
-    Observable<ISparkBatchJob> killBatchJob();
+    Observable<? extends ISparkBatchJob> killBatchJob();
 
     /**
      * Get Spark batch job driver host by ID
@@ -99,6 +99,18 @@ public interface ISparkBatchJob {
      */
     @NotNull
     Observable<SimpleImmutableEntry<String, Long>> getDriverLog(@NotNull String type, long logOffset, int size);
+
+    /**
+     * Get Spark job specified container log observable
+     *
+     * @param containerLogUrl the container log URL
+     * @param type the log type, such as `stderr`, `stdout`
+     * @param logOffset the log offset that fetching would start from
+     * @param size the fetching size, -1 for all.
+     * @return the log and its starting offset pair observable
+     */
+    @NotNull
+    Observable<AbstractMap.SimpleImmutableEntry<String, Long>> getContainerLog(@NotNull String containerLogUrl, @NotNull String type, long logOffset, int size);
 
     /**
      * Get Spark job submission log observable
@@ -178,4 +190,10 @@ public interface ISparkBatchJob {
      * @return true for success
      */
     boolean isSuccess(@NotNull String state);
+
+    /**
+     * a clone of this instance
+     * @return the clone of this instance
+     */
+    ISparkBatchJob clone();
 }

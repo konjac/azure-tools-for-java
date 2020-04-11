@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
  *
  * All rights reserved.
@@ -18,17 +18,19 @@
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
- *
  */
 
 package com.microsoft.azure.hdinsight.sdk.rest.azure.serverless.spark.models;
 
 import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
  * Update spark workers.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class UpdateSparkResourcePoolParameters {
     /**
      * Definition of spark workers.
@@ -37,7 +39,7 @@ public class UpdateSparkResourcePoolParameters {
     private List<UpdateSparkResourcePoolItemParameters> sparkResourceCollection;
 
     /**
-     * Get the sparkResourceCollection value.
+     * Get definition of spark workers.
      *
      * @return the sparkResourceCollection value
      */
@@ -46,7 +48,7 @@ public class UpdateSparkResourcePoolParameters {
     }
 
     /**
-     * Set the sparkResourceCollection value.
+     * Set definition of spark workers.
      *
      * @param sparkResourceCollection the sparkResourceCollection value to set
      * @return the UpdateSparkResourcePoolParameters object itself.

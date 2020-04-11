@@ -1,23 +1,23 @@
 /*
  * Copyright (c) Microsoft Corporation
- *   <p/>
- *  All rights reserved.
- *   <p/>
- *  MIT License
- *   <p/>
- *  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
- *  documentation files (the "Software"), to deal in the Software without restriction, including without limitation
- *  the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
- *  to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- *  <p/>
- *  The above copyright notice and this permission notice shall be included in all copies or substantial portions of
- *  the Software.
- *   <p/>
- *  THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- *  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
- *  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- *  SOFTWARE.
+ *
+ * All rights reserved.
+ *
+ * MIT License
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+ * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
+ * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
+ * the Software.
+ *
+ * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
 
 package com.microsoft.azuretools.authmanage.srvpri;
@@ -51,6 +51,7 @@ import com.microsoft.azuretools.authmanage.srvpri.step.RoleAssignmentStep;
 import com.microsoft.azuretools.authmanage.srvpri.step.ServicePrincipalStep;
 import com.microsoft.azuretools.authmanage.srvpri.step.Status;
 import com.microsoft.azuretools.authmanage.srvpri.step.StepManager;
+import com.microsoft.azuretools.sdkmanage.AccessTokenAzureManager;
 
 /**
  * Created by vlashch on 8/16/16.
@@ -63,7 +64,8 @@ public class SrvPriManager {
     // sp - role (1-many)
 
     private final static Logger LOGGER = Logger.getLogger(SrvPriManager.class.getName());
-    public static String createSp(String tenantId,
+    public static String createSp(AccessTokenAzureManager preAccessTokenAzureManager,
+                                  String tenantId,
                                   List<String> subscriptionIds,
                                   String suffix,
                                   IListener<Status> statusListener,
@@ -115,9 +117,9 @@ public class SrvPriManager {
         sm.getParamMap().put("password", password);
         sm.getParamMap().put("status", "standby");
 
-        sm.add(new ApplicationStep());
-        sm.add(new ServicePrincipalStep());
-        sm.add(new RoleAssignmentStep());
+        sm.add(new ApplicationStep(preAccessTokenAzureManager));
+        sm.add(new ServicePrincipalStep(preAccessTokenAzureManager));
+        sm.add(new RoleAssignmentStep(preAccessTokenAzureManager));
 
         fileReporter.report(String.format("== Starting for tenantId: '%s'", tenantId));
 
@@ -197,7 +199,7 @@ public class SrvPriManager {
             // set the properties value
             prop.setProperty("tenant", CommonParams.getTenantId());
             int i = 0;
-            for (String subscriptionId : CommonParams.getSubscriptionIdList()) {
+            for (String subscriptionId : CommonParams.getResultSubscriptionIdList()) {
                 if (i==0) {
                     prop.setProperty("subscription", subscriptionId);
                 } else {
@@ -250,7 +252,7 @@ public class SrvPriManager {
                         fileReporter.report(String.format("Failed to check cred file -retry limit %s has reached, error: %s", RETRY_QNTY, e.getMessage()));
                         throw e;
                     }
-                    fileReporter.report(String.format("Failed, will retry in %s seconds, error: %s", SLEEP_SEC, e.getMessage()));
+                    LOGGER.info(String.format("Failed %d/%d, will retry in %s seconds, error: %s", retry_count, RETRY_QNTY, SLEEP_SEC, e.getMessage()));
                     try {
                         Thread.sleep(SLEEP_SEC * 1000);
                     } catch (InterruptedException e1) {

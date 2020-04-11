@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
  *
  * All rights reserved.
@@ -18,36 +18,44 @@
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
- *
  */
 
 package com.microsoft.azure.hdinsight.sdk.rest.azure.serverless.spark.models;
 
 import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
  * List of resource pools.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class SparkResourcePoolList {
     /**
      * the list of resource pools.
      */
     @JsonProperty(value = "value", access = JsonProperty.Access.WRITE_ONLY)
-    private List<AnalyticsActivity> value;
+    private List<SparkResourcePool> value;
 
     /**
-     * the link (url) to the next page of results.
+     * The nextLink property.
      */
-    @JsonProperty(value = "nextLink", access = JsonProperty.Access.WRITE_ONLY)
+    @JsonProperty(value = "nextLink")
     private String nextLink;
 
     /**
-     * Get the value value.
+     * The count property.
+     */
+    @JsonProperty(value = "count")
+    private Integer count;
+
+    /**
+     * Get the list of resource pools.
      *
      * @return the value value
      */
-    public List<AnalyticsActivity> value() {
+    public List<SparkResourcePool> value() {
         return this.value;
     }
 
@@ -58,6 +66,37 @@ public class SparkResourcePoolList {
      */
     public String nextLink() {
         return this.nextLink;
+    }
+
+    /**
+     * Set the nextLink value.
+     *
+     * @param nextLink the nextLink value to set
+     * @return the SparkResourcePoolList object itself.
+     */
+    public SparkResourcePoolList withNextLink(String nextLink) {
+        this.nextLink = nextLink;
+        return this;
+    }
+
+    /**
+     * Get the count value.
+     *
+     * @return the count value
+     */
+    public Integer count() {
+        return this.count;
+    }
+
+    /**
+     * Set the count value.
+     *
+     * @param count the count value to set
+     * @return the SparkResourcePoolList object itself.
+     */
+    public SparkResourcePoolList withCount(Integer count) {
+        this.count = count;
+        return this;
     }
 
 }

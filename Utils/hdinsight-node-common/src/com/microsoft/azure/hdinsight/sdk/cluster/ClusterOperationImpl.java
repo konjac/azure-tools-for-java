@@ -1,35 +1,37 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
- * <p/>
+ *
  * All rights reserved.
- * <p/>
+ *
  * MIT License
- * <p/>
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
  * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- * <p/>
+ *
  * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
  * the Software.
- * <p/>
+ *
  * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
 package com.microsoft.azure.hdinsight.sdk.cluster;
 
 import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
-import com.microsoft.azure.hdinsight.sdk.common.*;
+import com.microsoft.azure.hdinsight.sdk.common.AuthenticationErrorHandler;
+import com.microsoft.azure.hdinsight.sdk.common.RequestCallback;
 import com.microsoft.azuretools.authmanage.AuthMethodManager;
 import com.microsoft.azuretools.authmanage.Environment;
 import com.microsoft.azuretools.authmanage.models.SubscriptionDetail;
-import com.microsoft.azuretools.sdkmanage.AzureManager;
-import com.microsoft.azuretools.azurecommons.helpers.NotNull;
 import com.microsoft.azuretools.azurecommons.helpers.AzureCmdException;
+import com.microsoft.azuretools.azurecommons.helpers.NotNull;
+import com.microsoft.azuretools.sdkmanage.AzureManager;
 import com.microsoft.tooling.msservices.helpers.azure.rest.AzureAADHelper;
 import com.microsoft.tooling.msservices.helpers.azure.rest.RestServiceManager;
 import com.microsoft.tooling.msservices.helpers.azure.rest.RestServiceManagerBaseImpl;
@@ -39,8 +41,7 @@ import java.lang.reflect.Type;
 import java.util.List;
 
 public class ClusterOperationImpl implements IClusterOperation {
-
-     private final String VERSION = "2015-03-01-preview";
+     private static final String VERSION = "2015-03-01-preview";
 
      /**
       * list hdinsight cluster
@@ -49,7 +50,7 @@ public class ClusterOperationImpl implements IClusterOperation {
       * @return cluster raw data info
       * @throws IOException
       */
-     public List<ClusterRawInfo> listCluster(final SubscriptionDetail subscription) throws IOException, HDIException, AzureCmdException {
+     public List<ClusterRawInfo> listCluster(final SubscriptionDetail subscription) throws AzureCmdException {
           try {
               String response = requestWithToken(subscription.getTenantId(), (accessToken) -> {
                       Environment environment = AuthMethodManager.getInstance().getAzureManager().getEnvironment();
@@ -85,7 +86,7 @@ public class ClusterOperationImpl implements IClusterOperation {
       * @return cluster configuration info
       * @throws IOException
       */
-     public ClusterConfiguration getClusterConfiguration(final SubscriptionDetail subscription, final String clusterId) throws IOException, HDIException, AzureCmdException {
+     public ClusterConfiguration getClusterConfiguration(final SubscriptionDetail subscription, final String clusterId) throws AzureCmdException {
           try {
                String response = requestWithToken(subscription.getTenantId(), new RequestCallback<String>() {
                     @Override

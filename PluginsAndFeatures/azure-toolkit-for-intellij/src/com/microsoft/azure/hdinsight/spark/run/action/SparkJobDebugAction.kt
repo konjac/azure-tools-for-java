@@ -24,15 +24,31 @@ package com.microsoft.azure.hdinsight.spark.run.action
 
 import com.intellij.execution.Executor
 import com.intellij.execution.ExecutorRegistry
+import com.intellij.execution.RunManagerEx
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.actionSystem.AnActionEvent
+import com.microsoft.azure.hdinsight.common.CommonConst
 import com.microsoft.azure.hdinsight.common.StreamUtil
 import com.microsoft.azure.hdinsight.spark.run.SparkBatchJobDebugExecutor.EXECUTOR_ID
+import com.microsoft.azure.hdinsight.spark.run.configuration.LivySparkBatchJobRunConfiguration
+import com.microsoft.azuretools.telemetry.TelemetryConstants
 
 class SparkJobDebugAction
     : SparkRunConfigurationAction(
         "SparkJobDebug",
         "Submit Spark Application to remote cluster with debugging support",
-        StreamUtil.getImageResourceFile("/icons/ToolWindowSparkJobDebug.png")?: AllIcons.Toolwindows.ToolWindowDebugger) {
+        StreamUtil.getImageResourceFile(CommonConst.ToolWindowSparkJobDebugIcon_13x_Path)?: AllIcons.Toolwindows.ToolWindowDebugger) {
     override val runExecutor: Executor
         get() = ExecutorRegistry.getInstance().getExecutorById(EXECUTOR_ID)
+
+    override fun getServiceName(event: AnActionEvent): String {
+        val project = event.project ?: return super.getServiceName(event)
+        val runManagerEx = RunManagerEx.getInstanceEx(project)
+        val selectedConfigSettings = runManagerEx.selectedConfiguration
+        return (selectedConfigSettings?.configuration as LivySparkBatchJobRunConfiguration).sparkApplicationType.value
+    }
+
+    override fun getOperationName(event: AnActionEvent?): String {
+        return TelemetryConstants.DEBUG_REMOTE_SPARK_JOB
+    }
 }

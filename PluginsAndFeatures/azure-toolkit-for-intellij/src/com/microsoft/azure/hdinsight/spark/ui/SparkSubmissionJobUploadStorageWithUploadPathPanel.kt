@@ -22,117 +22,118 @@
 
 package com.microsoft.azure.hdinsight.spark.ui
 
-import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.ModalityState
-import com.intellij.ui.HideableTitledPanel
-import com.intellij.uiDesigner.core.GridConstraints
-import com.intellij.uiDesigner.core.GridLayoutManager
-import com.microsoft.azure.hdinsight.common.mvc.SettableControl
+import com.intellij.execution.configurations.RuntimeConfigurationError
+import com.intellij.execution.configurations.RuntimeConfigurationException
+import com.intellij.openapi.Disposable
+import com.intellij.openapi.util.Disposer
+import com.intellij.uiDesigner.core.GridConstraints.*
+import com.microsoft.azure.hdinsight.common.logger.ILogger
+import com.microsoft.azure.hdinsight.common.mvc.IdeaSettableControlWithRwLock
+import com.microsoft.azure.hdinsight.common.mvvm.Mvvm
 import com.microsoft.azure.hdinsight.spark.common.SparkSubmitJobUploadStorageModel
-import com.microsoft.azure.hdinsight.spark.common.SparkSubmitStorageType
-import org.apache.commons.lang3.StringUtils
-import rx.subjects.PublishSubject
-import javax.swing.*
+import com.microsoft.azure.hdinsight.spark.run.SparkSubmissionRunner
+import com.microsoft.azure.hdinsight.spark.ui.SparkSubmissionJobUploadStorageBasicCard.Companion.isNotReadyPath
+import com.microsoft.azuretools.ijidea.ui.AccessibleHideableTitledPanel
+import com.microsoft.intellij.forms.dsl.panel
+import com.microsoft.intellij.rxjava.DisposableObservers
+import com.microsoft.intellij.rxjava.IdeaSchedulers
+import javax.swing.JLabel
+import javax.swing.JTextField
 
-class SparkSubmissionJobUploadStorageWithUploadPathPanel : JPanel(), SettableControl<SparkSubmitJobUploadStorageModel> {
-    private fun baseConstraints() = GridConstraints().apply { anchor = GridConstraints.ANCHOR_WEST }
-    private val colTemplate = listOf(
-            // Column 0
-            baseConstraints().apply {
-                column = 0
-                indent = 1
-            },
-            //  Column 1
-            baseConstraints().apply {
-                column = 1
-                indent = 1
-                hSizePolicy = GridConstraints.SIZEPOLICY_WANT_GROW
-                fill = GridConstraints.FILL_HORIZONTAL
-            })
-
-    private fun buildConstraints(colTemplateOffset: Int): GridConstraints = colTemplate[colTemplateOffset].clone() as GridConstraints
-
+class SparkSubmissionJobUploadStorageWithUploadPathPanel
+    : Mvvm, Disposable, IdeaSettableControlWithRwLock<SparkSubmitJobUploadStorageModel>, ILogger {
     private val jobUploadStorageTitle = "Job Upload Storage"
     private val uploadPathLabel = JLabel("Upload Path")
     private val uploadPathField = JTextField().apply {
         isEditable = false
-        border = BorderFactory.createEmptyBorder()
-    }
-    val storagePanel = SparkSubmissionJobUploadStoragePanel()
-    private val hideableJobUploadStoragePanel = HideableTitledPanel(jobUploadStorageTitle, true, storagePanel, false)
-
-    private val layoutPlan = listOf(
-            Place(uploadPathLabel, buildConstraints(0).apply { row = 0 }), Place(uploadPathField, buildConstraints(1).apply { row = 0 }),
-            Place(hideableJobUploadStoragePanel, baseConstraints().apply {
-                row = 1
-                colSpan = 2
-                hSizePolicy = GridConstraints.SIZEPOLICY_WANT_GROW
-                fill = GridConstraints.FILL_HORIZONTAL
-            })
-    )
-
-    val storageCheckSubject: PublishSubject<String> = PublishSubject.create()
-
-    init {
-        layout = GridLayoutManager(layoutPlan.last().gridConstraints.row + 1, colTemplate.size)
-        layoutPlan.forEach { (component, gridConstrains) -> add(component, gridConstrains) }
     }
 
-    override fun removeNotify() {
-        super.removeNotify()
-
-        storageCheckSubject.onCompleted()
+    private val storagePanel = SparkSubmissionJobUploadStoragePanel().apply {
+        Disposer.register(this@SparkSubmissionJobUploadStorageWithUploadPathPanel, this@apply)
     }
 
-    override fun getData(data: SparkSubmitJobUploadStorageModel) {
-        // Component -> Data
-        data.errorMsg = storagePanel.errorMessage
-        data.uploadPath = uploadPathField.text
-        when (storagePanel.storageTypeComboBox.selectedItem) {
-            storagePanel.azureBlobCard.title -> {
-                data.storageAccountType = SparkSubmitStorageType.BLOB
-                data.storageAccount = storagePanel.azureBlobCard.storageAccountField.text.trim()
-                data.storageKey = storagePanel.azureBlobCard.storageKeyField.text.trim()
-                data.containersModel = storagePanel.azureBlobCard.storageContainerComboBox.model as DefaultComboBoxModel
-                data.selectedContainer = storagePanel.azureBlobCard.storageContainerComboBox.selectedItem as? String
-            }
-            storagePanel.clusterDefaultStorageCard.title -> {
-                data.storageAccountType = SparkSubmitStorageType.DEFAULT_STORAGE_ACCOUNT
-            }
-            storagePanel.sparkInteractiveSessionCard.title -> {
-                data.storageAccountType = SparkSubmitStorageType.SPARK_INTERACTIVE_SESSION
-            }
-        }
-    }
+    private val hideableJobUploadStoragePanel = AccessibleHideableTitledPanel(jobUploadStorageTitle, storagePanel.view)
 
-    override fun setData(data: SparkSubmitJobUploadStorageModel) {
-        // data -> Component
-        val applyData: () -> Unit = {
-            storagePanel.storageTypeComboBox.selectedIndex = findStorageTypeComboBoxSelectedIndex(data.storageAccountType)
-            storagePanel.errorMessage = data.errorMsg
-            storagePanel.storageAccountType = data.storageAccountType
-            uploadPathField.text = data.uploadPath
-            if (data.storageAccountType == SparkSubmitStorageType.BLOB) {
-                storagePanel.azureBlobCard.storageAccountField.text = data.storageAccount
-                storagePanel.azureBlobCard.storageKeyField.text = data.storageKey
-                if (data.containersModel.size == 0 && StringUtils.isEmpty(storagePanel.errorMessage) && StringUtils.isNotEmpty(data.selectedContainer)) {
-                    storagePanel.azureBlobCard.storageContainerComboBox.model = DefaultComboBoxModel(arrayOf(data.selectedContainer))
-                } else {
-                    storagePanel.azureBlobCard.storageContainerComboBox.model = data.containersModel
+    override val view by lazy {
+        val formBuilder = panel {
+            columnTemplate {
+                col {
+                    anchor = ANCHOR_WEST
+                }
+                col {
+                    anchor = ANCHOR_WEST
+                    hSizePolicy = SIZEPOLICY_WANT_GROW
+                    fill = FILL_HORIZONTAL
+                }
+                row {
+                    c(uploadPathLabel
+                            .apply { labelFor = uploadPathField }) { indent = 0 }
+                                                                                        c(uploadPathField) {}
+                }
+                row {
+                    c(hideableJobUploadStoragePanel) { colSpan = 2; hSizePolicy = SIZEPOLICY_WANT_GROW; fill = FILL_HORIZONTAL }
                 }
             }
         }
-        ApplicationManager.getApplication().invokeLater(applyData, ModalityState.any())
+
+        formBuilder.buildPanel()
     }
 
-    fun findStorageTypeComboBoxSelectedIndex(storageAccountType: SparkSubmitStorageType):Int {
-        listOf(0 until storagePanel.storageTypeComboBox.model.size).flatten().forEach {
-            if ((storagePanel.storageTypeComboBox.model.getElementAt(it) == storagePanel.azureBlobCard.title && storageAccountType == SparkSubmitStorageType.BLOB) ||
-                    (storagePanel.storageTypeComboBox.model.getElementAt(it) == storagePanel.sparkInteractiveSessionCard.title && storageAccountType == SparkSubmitStorageType.SPARK_INTERACTIVE_SESSION) ||
-                    (storagePanel.storageTypeComboBox.model.getElementAt(it) == storagePanel.clusterDefaultStorageCard.title && storageAccountType == SparkSubmitStorageType.DEFAULT_STORAGE_ACCOUNT)) {
-                return it
-            }
+    inner class ViewModel : Mvvm.ViewModel, DisposableObservers() {
+        val uploadStorage
+                get() = storagePanel.viewModel
+
+        val clusterSelectedSubject
+            get() = uploadStorage.clusterSelectedSubject
+
+        private val ideaSchedulers = IdeaSchedulers()
+
+        fun getCurrentUploadFieldText() : String? = uploadPathField.text?.trim()
+
+        init {
+            uploadStorage.validatedStorageUploadUri
+                    .observeOn(ideaSchedulers.dispatchUIThread())
+                    .subscribe(
+                            { uploadPathField.text = it },
+                            { log().warn("Failed to update upload path field: ${it.message}") }
+                    )
         }
-        return -1
+    }
+
+    override val viewModel = ViewModel().apply {
+        Disposer.register(this@SparkSubmissionJobUploadStorageWithUploadPathPanel, this@apply)
+    }
+
+    override val model: SparkSubmitJobUploadStorageModel
+        get() = SparkSubmitJobUploadStorageModel().apply { getData(this) }
+
+    @Throws(RuntimeConfigurationException::class)
+    fun checkConfigurationBeforeRun(runner: SparkSubmissionRunner, config: SparkSubmitJobUploadStorageModel) {
+        val uploadPath = config.uploadPath?.trimStart()
+
+        val errHint = when {
+            uploadPath.isNullOrBlank() -> "upload path is blank"
+            isNotReadyPath(uploadPath) -> uploadPath
+            else -> return
+        }
+
+        throw RuntimeConfigurationError(
+                "There are artifacts uploading storage configuration issues, fix it before continue, please: $errHint")
+    }
+
+    override fun readWithLock(to: SparkSubmitJobUploadStorageModel) {
+        // Component -> Data
+        to.uploadPath = uploadPathField.text
+
+        storagePanel.readWithLock(to)
+    }
+
+    override fun writeWithLock(from: SparkSubmitJobUploadStorageModel) {
+        uploadPathField.text = from.uploadPath
+
+        storagePanel.writeWithLock(from)
+    }
+
+    override fun dispose() {
     }
 }

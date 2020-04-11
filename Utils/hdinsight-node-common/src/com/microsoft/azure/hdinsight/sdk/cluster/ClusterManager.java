@@ -1,46 +1,48 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
- * <p/>
+ *
  * All rights reserved.
- * <p/>
+ *
  * MIT License
- * <p/>
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
  * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- * <p/>
+ *
  * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
  * the Software.
- * <p/>
+ *
  * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
 package com.microsoft.azure.hdinsight.sdk.cluster;
 
-import com.microsoft.azure.hdinsight.sdk.common.AggregatedException;
-import com.microsoft.azure.hdinsight.sdk.common.CommonRunnable;
-import com.microsoft.azure.hdinsight.sdk.common.HDIException;
+import com.microsoft.azure.hdinsight.common.ClusterManagerEx;
+import com.microsoft.azure.hdinsight.common.CommonConst;
+import com.microsoft.azure.hdinsight.common.logger.ILogger;
+import com.microsoft.azure.hdinsight.sdk.cluster.HDInsightNewAPI.ClusterOperationNewAPIImpl;
+import com.microsoft.azure.hdinsight.sdk.common.AuthType;
+import com.microsoft.azure.hdinsight.spark.common.SparkBatchSubmission;
 import com.microsoft.azuretools.authmanage.models.SubscriptionDetail;
-import com.microsoft.azuretools.azurecommons.helpers.AzureCmdException;
+import com.microsoft.azuretools.azurecommons.helpers.NotNull;
+import com.microsoft.tooling.msservices.components.DefaultLoader;
+import org.apache.commons.lang3.StringUtils;
+import rx.Observable;
+import rx.schedulers.Schedulers;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.Optional;
+import java.util.Set;
 
-public class ClusterManager {
-
-    private final int MAX_CONCURRENT = 5;
-    private final int TIME_OUT = 5 * 60;
-
+public class ClusterManager implements ILogger {
     // Singleton Instance
     private static ClusterManager instance = null;
 
@@ -59,18 +61,16 @@ public class ClusterManager {
     private ClusterManager() {
     }
 
-
-    /**
-     * get hdinsight detailed cluster info list
-     *
-     * @param subscriptions
-     * @return detailed cluster info list
-     * @throws AggregatedException
-     */
-    public synchronized List<IClusterDetail> getHDInsightClusers(
-            List<SubscriptionDetail> subscriptions) throws AggregatedException {
-
-        return getClusterDetails(subscriptions);
+    private List<ClusterRawInfo> deduplicateClusters(@NotNull List<ClusterRawInfo> clusters) {
+        Set<String> clusterNameSet = new HashSet<>(clusters.size());
+        List<ClusterRawInfo> resultClusters = new ArrayList<>(clusters.size());
+        clusters.forEach(clusterRawInfo -> {
+            // If we try to add an element that already exists to a set, it will return false
+            if (clusterNameSet.add(clusterRawInfo.getName())) {
+                resultClusters.add(clusterRawInfo);
+            }
+        });
+        return resultClusters;
     }
 
     /**
@@ -78,74 +78,82 @@ public class ClusterManager {
      *
      * @param subscriptions
      * @return detailed cluster info list with specific cluster type
-     * @throws AggregatedException
      */
-    public synchronized List<IClusterDetail> getHDInsightClustersWithSpecificType(
+    public synchronized Observable<List<ClusterDetail>> getHDInsightClustersWithSpecificType(
             List<SubscriptionDetail> subscriptions,
-            String osType) throws AggregatedException {
-        List<IClusterDetail> clusterDetailList = getClusterDetails(subscriptions);
-
-        Map<String, IClusterDetail> filterClusterDetailMap = new HashMap<>();
-        for (IClusterDetail clusterDetail : clusterDetailList) {
-            ClusterType clusterType = clusterDetail.getType();
-            String myOsType = clusterDetail.getOSType();
-            if (clusterType.equals(ClusterType.rserver) || clusterType.equals(ClusterType.spark)) {
-
-                // remove Windows cluster
-               if (myOsType != null && osType != null && !myOsType.equalsIgnoreCase(osType)) {
-                   continue;
-               }
-               filterClusterDetailMap.put(clusterDetail.getName(), clusterDetail);
-            }
-        }
-
-        List<IClusterDetail> filterClusterDetailList = new ArrayList<>();
-        filterClusterDetailList.addAll(filterClusterDetailMap.values());
-
-        return filterClusterDetailList;
+            String osType) {
+        return Observable.from(subscriptions)
+                .flatMap(subscriptionDetail ->
+                        Observable.fromCallable(() ->
+                                new ClusterOperationImpl().listCluster(subscriptionDetail))
+                                // Run time-consuming list clusters job in IO thread
+                                .subscribeOn(Schedulers.io())
+                                // Remove duplicate clusters that share the same cluster name
+                                .map(this::deduplicateClusters)
+                                .flatMap(Observable::from)
+                                // Extract RServer and Spark Cluster with required OS type we need
+                                .filter(clusterRawInfo -> {
+                                    ClusterType rawClusterType = ClusterDetail.getType(clusterRawInfo);
+                                    String rawOsType = ClusterDetail.getOSType(clusterRawInfo);
+                                    return (rawClusterType.equals(ClusterType.rserver)
+                                            || rawClusterType.equals(ClusterType.spark))
+                                                && StringUtils.equalsIgnoreCase(rawOsType, osType);
+                                })
+                                .flatMap(clusterRawInfo -> {
+                                    ClusterOperationNewAPIImpl probeClusterNewApiOperation = new ClusterOperationNewAPIImpl(subscriptionDetail);
+                                    if (isHDInsightNewSDKEnabled()) {
+                                        return isProbeNewApiSucceed(probeClusterNewApiOperation, clusterRawInfo)
+                                                // Run the time-consuming probe job concurrently in IO thread
+                                                .subscribeOn(Schedulers.io())
+                                                .map(isProbeSucceed -> isProbeSucceed
+                                                        ? (isMfaEspCluster(clusterRawInfo)
+                                                            ? new MfaClusterDetail(subscriptionDetail, clusterRawInfo, probeClusterNewApiOperation)
+                                                            : new ClusterDetail(subscriptionDetail, clusterRawInfo, probeClusterNewApiOperation))
+                                                        : new ClusterDetail(subscriptionDetail, clusterRawInfo, new ClusterOperationImpl()));
+                                    } else {
+                                        return Observable.just(new ClusterDetail(subscriptionDetail, clusterRawInfo, new ClusterOperationImpl()));
+                                    }
+                                })
+                )
+                .doOnNext(clusterDetail -> {
+                    String debugMsg = String.format("Thread: %s. Sub: %s. Cluster: %s",
+                            Thread.currentThread().getName(),
+                            clusterDetail.getSubscription().getSubscriptionName(),
+                            clusterDetail.getName());
+                    log().info(debugMsg);
+                })
+                .toList();
     }
 
-    private List<IClusterDetail> getClusterDetails(List<SubscriptionDetail> subscriptions) throws AggregatedException {
-        ExecutorService taskExecutor = Executors.newFixedThreadPool(MAX_CONCURRENT);
-        final List<IClusterDetail> cachedClusterList = new ArrayList<>();
-        final List<Exception> aggregateExceptions = new ArrayList<>();
+    public boolean isHDInsightNewSDKEnabled() {
+        return DefaultLoader.getIdeHelper().isApplicationPropertySet(CommonConst.ENABLE_HDINSIGHT_NEW_SDK)
+                && Boolean.valueOf(DefaultLoader.getIdeHelper().getApplicationProperty(CommonConst.ENABLE_HDINSIGHT_NEW_SDK));
+    }
 
-        for (SubscriptionDetail subscription : subscriptions) {
-            taskExecutor.execute(new CommonRunnable<SubscriptionDetail, Exception>(subscription) {
-                @Override
-                public void runSpecificParameter(SubscriptionDetail parameter) throws IOException, HDIException, AzureCmdException {
-                    IClusterOperation clusterOperation = new ClusterOperationImpl();
-                    List<ClusterRawInfo> clusterRawInfoList = clusterOperation.listCluster(parameter);
-                    if (clusterRawInfoList != null) {
-                        for (ClusterRawInfo item : clusterRawInfoList) {
-                            IClusterDetail tempClusterDetail = new ClusterDetail(parameter, item);
-                            synchronized (ClusterManager.class) {
-                                cachedClusterList.add(tempClusterDetail);
-                            }
-                        }
-                    }
-                }
+    private Observable<Boolean> isProbeNewApiSucceed(
+            @NotNull ClusterOperationNewAPIImpl clusterOperation,
+            @NotNull ClusterRawInfo clusterRawInfo) {
+        return clusterOperation.isProbeGetConfigurationSucceed(clusterRawInfo);
+    }
 
-                @Override
-                public void exceptionHandle(Exception e) {
-                    synchronized (aggregateExceptions) {
-                        aggregateExceptions.add(e);
-                    }
-                }
-            });
+    public boolean isMfaEspCluster(ClusterRawInfo rawInfo) {
+        // A way is to check `idbrokernode` type role in `computerProfile`
+        Optional<List<Role>> rolesOption = Optional.ofNullable(rawInfo.getProperties())
+                .map(ClusterProperties::getComputeProfile)
+                .map(ComputeProfile::getRoles);
+
+        if (rolesOption.isPresent()) {
+            return rolesOption.get().stream().anyMatch(role -> role.getName().equalsIgnoreCase("idbrokernode"));
         }
 
-        taskExecutor.shutdown();
+        // Fallback way is to challenge the authentication type
         try {
-            taskExecutor.awaitTermination(TIME_OUT, TimeUnit.SECONDS);
-        } catch (InterruptedException exception) {
-            aggregateExceptions.add(exception);
-        }
+            return SparkBatchSubmission.getInstance().probeAuthType(
+                    ClusterManagerEx.getInstance().getClusterConnectionString(rawInfo.getName())) == AuthType.AADAuth;
+        } catch (IOException ex) {
+            log().warn("Can't probe HDInsight cluster authentication type: " + rawInfo.getId(), ex);
 
-        if (aggregateExceptions.size() > 0) {
-            throw new AggregatedException(aggregateExceptions);
+            return false;
         }
-
-        return cachedClusterList;
     }
 }

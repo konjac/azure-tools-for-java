@@ -1,18 +1,18 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
- * 
+ *
  * All rights reserved.
- * 
+ *
  * MIT License
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
  * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
  * the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
@@ -30,6 +30,11 @@ import com.microsoft.azuretools.core.mvp.model.rediscache.RedisExplorerMvpModel;
 import com.microsoft.azuretools.core.mvp.ui.base.MvpPresenter;
 import com.microsoft.azuretools.core.mvp.ui.rediscache.RedisScanResult;
 import com.microsoft.azuretools.core.mvp.ui.rediscache.RedisValueData;
+import com.microsoft.azuretools.telemetry.TelemetryConstants;
+import com.microsoft.azuretools.telemetrywrapper.ErrorType;
+import com.microsoft.azuretools.telemetrywrapper.EventUtil;
+import com.microsoft.azuretools.telemetrywrapper.Operation;
+import com.microsoft.azuretools.telemetrywrapper.TelemetryManager;
 import com.microsoft.tooling.msservices.components.DefaultLoader;
 
 import java.util.ArrayList;
@@ -52,7 +57,7 @@ public class RedisExplorerPresenter<V extends RedisExplorerMvpView> extends MvpP
 
     /**
      * Called when the explorer needs the number of databases in Redis Cache.
-     * 
+     *
      * @param sid
      *            subscription id of Redis Cache
      * @param id
@@ -77,7 +82,7 @@ public class RedisExplorerPresenter<V extends RedisExplorerMvpView> extends MvpP
 
     /**
      * Called when the database combo selection event is fired.
-     * 
+     *
      * @param sid
      *            subscription id of Redis Cache
      * @param id
@@ -91,7 +96,7 @@ public class RedisExplorerPresenter<V extends RedisExplorerMvpView> extends MvpP
 
     /**
      * Called when Scan button is clicked.
-     * 
+     *
      * @param sid
      *            subscription id of Redis Cache
      * @param id
@@ -104,6 +109,8 @@ public class RedisExplorerPresenter<V extends RedisExplorerMvpView> extends MvpP
      *            scan match pattern for Redis Cache
      */
     public void onKeyList(int db, String cursor, String pattern) {
+        Operation operation = TelemetryManager.createOperation(TelemetryConstants.REDIS, TelemetryConstants.REDIS_SCAN);
+        operation.start();
         Observable.fromCallable(() -> {
             return RedisExplorerMvpModel.getInstance().scanKeys(sid, id, db, cursor, pattern);
         })
@@ -114,13 +121,18 @@ public class RedisExplorerPresenter<V extends RedisExplorerMvpView> extends MvpP
                     return;
                 }
                 getMvpView().showScanResult(new RedisScanResult(result));
+                operation.complete();
             });
         }, e -> {
+            EventUtil.logError(operation, ErrorType.userError, new Exception(e), null, null);
+            operation.complete();
             errorHandler(CANNOT_GET_REDIS_INFO, (Exception) e);
         });
     }
 
     public void onGetKeyAndValue(int db, String key) {
+        Operation operation = TelemetryManager.createOperation(TelemetryConstants.REDIS, TelemetryConstants.REDIS_GET);
+        operation.start();
         Observable.fromCallable(() -> {
             boolean isExist = RedisExplorerMvpModel.getInstance().checkKeyExistance(sid, id, db, key);
             if (!isExist) {
@@ -141,15 +153,18 @@ public class RedisExplorerPresenter<V extends RedisExplorerMvpView> extends MvpP
                 }
                 getMvpView().updateKeyList();
                 getMvpView().showContent(result);
+                operation.complete();
             });
         }, e -> {
+            EventUtil.logError(operation, ErrorType.userError, new Exception(e), null, null);
+            operation.complete();
             errorHandler(CANNOT_GET_REDIS_INFO, (Exception) e);
         });
     }
 
     /**
      * Called when one list item is selected.
-     * 
+     *
      * @param sid
      *            subscription id of Redis Cache
      * @param id
@@ -182,14 +197,14 @@ public class RedisExplorerPresenter<V extends RedisExplorerMvpView> extends MvpP
 
     /**
      * Called when the jedis pool needs to be released.
-     * 
+     *
      * @param id
      *            resource id of Redis Cache
      */
     public void onRelease(String id) {
         RedisConnectionPools.getInstance().releasePool(id);
     }
-    
+
     public void initializeResourceData(String sid, String id) {
         this.sid = sid;
         this.id = id;

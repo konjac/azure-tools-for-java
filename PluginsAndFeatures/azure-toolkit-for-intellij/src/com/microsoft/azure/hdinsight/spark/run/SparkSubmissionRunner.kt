@@ -22,4 +22,19 @@
 
 package com.microsoft.azure.hdinsight.spark.run
 
-interface SparkSubmissionRunner
+import com.intellij.execution.configurations.RunConfiguration
+import com.microsoft.azure.hdinsight.common.MessageInfoType
+import com.microsoft.azure.hdinsight.spark.common.ISparkBatchJob
+import com.microsoft.azure.hdinsight.spark.common.SparkSubmitModel
+import rx.Observable
+import rx.Observer
+import java.util.AbstractMap.SimpleImmutableEntry
+
+interface SparkSubmissionRunner {
+    /**
+     * Build a Spark Batch Job observable, may produce {@see ExecutionException}
+     */
+    fun buildSparkBatchJob(submitModel: SparkSubmitModel): Observable<ISparkBatchJob>
+
+    fun setFocus(runConfiguration: RunConfiguration)
+}

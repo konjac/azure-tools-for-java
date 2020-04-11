@@ -1,53 +1,64 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
- * <p/>
+ *
  * All rights reserved.
- * <p/>
+ *
  * MIT License
- * <p/>
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
  * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- * <p/>
+ *
  * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
  * the Software.
- * <p/>
+ *
  * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
 package com.microsoft.azure.hdinsight.sdk.cluster;
 
 import com.google.gson.annotations.Expose;
 import com.microsoft.azure.hdinsight.common.ClusterManagerEx;
-import com.microsoft.azure.hdinsight.sdk.common.HDIException;
 import com.microsoft.azure.hdinsight.sdk.storage.HDStorageAccount;
 import com.microsoft.azure.hdinsight.sdk.storage.IHDIStorageAccount;
+import com.microsoft.azure.hdinsight.sdk.storage.StorageAccountType;
+import com.microsoft.azure.hdinsight.spark.common.SparkSubmitStorageType;
+import com.microsoft.azure.hdinsight.spark.common.SparkSubmitStorageTypeOptionsForCluster;
+import com.microsoft.azuretools.adauth.StringUtils;
 import com.microsoft.azuretools.authmanage.models.SubscriptionDetail;
+import com.microsoft.azuretools.azurecommons.helpers.NotNull;
 import com.microsoft.azuretools.azurecommons.helpers.Nullable;
 
-import java.io.IOException;
 import java.net.URI;
-import java.util.List;
 import java.util.Optional;
 
 public class HDInsightAdditionalClusterDetail implements IClusterDetail, LivyCluster, YarnCluster {
-
+    @NotNull
     private String clusterName;
+    @NotNull
     private String userName;
-    private String passWord;
+    @NotNull
+    private String password;
 
     @Expose
     @Nullable
     private HDStorageAccount defaultStorageAccount;
 
-    public HDInsightAdditionalClusterDetail(String clusterName, String userName, String passWord, @Nullable HDStorageAccount storageAccount) {
+    @Nullable
+    private String defaultStorageRootPath;
+
+    public HDInsightAdditionalClusterDetail(@NotNull String clusterName,
+                                            @NotNull String userName,
+                                            @NotNull String password,
+                                            @Nullable HDStorageAccount storageAccount) {
         this.clusterName = clusterName;
         this.userName = userName;
-        this.passWord = passWord;
+        this.password = password;
         defaultStorageAccount = storageAccount;
     }
 
@@ -73,16 +84,6 @@ public class HDInsightAdditionalClusterDetail implements IClusterDetail, LivyClu
     }
 
     @Override
-    public String getState() {
-        return null;
-    }
-
-    @Override
-    public String getLocation() {
-        return null;
-    }
-
-    @Override
     public String getConnectionUrl() {
         return ClusterManagerEx.getInstance().getClusterConnectionString(this.clusterName);
     }
@@ -96,31 +97,6 @@ public class HDInsightAdditionalClusterDetail implements IClusterDetail, LivyClu
     }
 
     @Override
-    public String getCreateDate() {
-        return null;
-    }
-
-    @Override
-    public ClusterType getType() {
-        return null;
-    }
-
-    @Override
-    public String getResourceGroup(){
-        return null;
-    }
-
-    @Override
-    public String getVersion() {
-        return null;
-    }
-
-    @Override
-    public String getSparkVersion() {
-        return null;
-    }
-
-    @Override
     public SubscriptionDetail getSubscription() {
         return new SubscriptionDetail("[LinkedCluster]", "[NoSubscription]", "", false);
     }
@@ -131,33 +107,76 @@ public class HDInsightAdditionalClusterDetail implements IClusterDetail, LivyClu
     }
 
     @Override
-    public String getHttpUserName() throws HDIException {
+    @NotNull
+    public String getHttpUserName() {
         return userName;
     }
 
     @Override
-    public String getHttpPassword() throws HDIException {
-        return passWord;
+    @NotNull
+    public String getHttpPassword() {
+        return password;
     }
 
     @Override
-    public String getOSType() {
-        return null;
+    public SparkSubmitStorageType getDefaultStorageType() {
+        SparkSubmitStorageType type = getStorageOptionsType().getOptionTypes().length == 0
+                ? null
+                : getStorageOptionsType().getOptionTypes()[0];
+        return type;
+    }
+
+    @Nullable
+    @Override
+    public String getDefaultStorageRootPath() {
+        return defaultStorageRootPath;
+    }
+
+    public void setDefaultStorageRootPath(@Nullable String defaultStorageRootPath) {
+        this.defaultStorageRootPath = defaultStorageRootPath;
     }
 
     @Override
     @Nullable
-    public IHDIStorageAccount getStorageAccount() throws HDIException {
+    public IHDIStorageAccount getStorageAccount() {
         return defaultStorageAccount;
     }
 
     @Override
-    public List<HDStorageAccount> getAdditionalStorageAccounts() {
-        return null;
+    public SparkSubmitStorageTypeOptionsForCluster getStorageOptionsType() {
+        // for cluster which is not reader
+        if (StringUtils.isNullOrEmpty(defaultStorageRootPath)) {
+            return SparkSubmitStorageTypeOptionsForCluster.HdiAdditionalClusterWithUndetermineStorage;
+        }
+
+        StorageAccountType type = StorageAccountType.parseUri(URI.create(defaultStorageRootPath));
+        switch (type) {
+            case BLOB:
+                return SparkSubmitStorageTypeOptionsForCluster.HdiAdditionalClusterForReaderWithBlob;
+            case ADLSGen2:
+                return SparkSubmitStorageTypeOptionsForCluster.HdiAdditionalClusterForReaderWithADLSGen2;
+            case ADLS:
+                return SparkSubmitStorageTypeOptionsForCluster.HdiAdditionalClusterForReaderWithADLSGen1;
+            default:
+                return SparkSubmitStorageTypeOptionsForCluster.HdiAdditionalClusterWithUndetermineStorage;
+        }
     }
 
     @Override
-    public void getConfigurationInfo() throws IOException, HDIException {
+    public int hashCode() {
+        return getName().hashCode();
+    }
 
+    @Override
+    public boolean equals(Object o) {
+        if (o == this) {
+            return true;
+        }
+
+        if (!(o instanceof IClusterDetail)) {
+            return false;
+        }
+
+        return o.hashCode() == this.hashCode();
     }
 }

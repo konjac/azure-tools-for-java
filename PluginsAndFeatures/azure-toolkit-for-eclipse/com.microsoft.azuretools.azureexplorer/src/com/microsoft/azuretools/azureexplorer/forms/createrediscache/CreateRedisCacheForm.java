@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
  *
  * All rights reserved.
@@ -22,6 +22,13 @@
 
 package com.microsoft.azuretools.azureexplorer.forms.createrediscache;
 
+import static com.microsoft.azuretools.telemetry.TelemetryConstants.CREATE_REDIS;
+import static com.microsoft.azuretools.telemetry.TelemetryConstants.REDIS;
+
+import com.microsoft.azuretools.telemetrywrapper.ErrorType;
+import com.microsoft.azuretools.telemetrywrapper.EventUtil;
+import com.microsoft.azuretools.telemetrywrapper.Operation;
+import com.microsoft.azuretools.telemetrywrapper.TelemetryManager;
 import java.io.IOException;
 import java.net.URL;
 import java.util.Comparator;
@@ -454,24 +461,30 @@ public class CreateRedisCacheForm extends AzureTitleAreaDialogWrapper {
             MessageDialog.openError(getShell(), "Form Validation Error", e.getMessage());
             return;
         }
+        final Operation operation = TelemetryManager.createOperation(REDIS, CREATE_REDIS);
         try {
+            operation.start();
             Azure azure = azureManager.getAzure(currentSub.getSubscriptionId());
             ProcessingStrategy processor = RedisCacheUtil.doGetProcessor(azure, skus, dnsNameValue,
                     selectedLocationValue, selectedResGrpValue, selectedPriceTierValue, noSSLPort, newResGrp);
             ExecutorService executor = Executors.newSingleThreadExecutor();
             ListeningExecutorService executorService = MoreExecutors.listeningDecorator(executor);
+
             ListenableFuture<Void> futureTask = executorService.submit(new CreateRedisCacheCallable(processor));
             final ProcessingStrategy processorInner = processor;
             Futures.addCallback(futureTask, new FutureCallback<Void>() {
                 @Override
                 public void onSuccess(Void arg0) {
                     if (onCreate != null) {
+                        operation.complete();
                         onCreate.run();
                     }
                 }
 
                 @Override
                 public void onFailure(Throwable throwable) {
+                    EventUtil.logError(operation, ErrorType.userError, new Exception(throwable), null, null);
+                    operation.complete();
                     MessageDialog.openError(getShell(),
                             String.format(
                                     MessageHandler.getResourceString(resourceBundle, CREATING_ERROR_INDICATOR_FORMAT),
@@ -483,8 +496,10 @@ public class CreateRedisCacheForm extends AzureTitleAreaDialogWrapper {
                         LOG.log("Error occurred while notifyCompletion in RedisCache.", ex);
                     }
                 }
-            });
+            }, MoreExecutors.directExecutor());
         } catch (Exception ex) {
+            EventUtil.logError(operation, ErrorType.userError, ex, null, null);
+            operation.complete();
             MessageDialog.openError(getShell(),
                     String.format(MessageHandler.getResourceString(resourceBundle, CREATING_ERROR_INDICATOR_FORMAT),
                             dnsNameValue),

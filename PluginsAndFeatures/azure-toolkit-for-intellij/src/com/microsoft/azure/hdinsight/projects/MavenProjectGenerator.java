@@ -1,18 +1,18 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
- * <p/>
+ *
  * All rights reserved.
- * <p/>
+ *
  * MIT License
- * <p/>
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
  * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- * <p/>
+ *
  * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
  * the Software.
- * <p/>
+ *
  * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
@@ -24,13 +24,11 @@ package com.microsoft.azure.hdinsight.projects;
 
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.util.PathUtil;
 import com.microsoft.azure.hdinsight.common.StreamUtil;
-import com.intellij.openapi.util.io.FileUtil;
 import com.microsoft.azure.hdinsight.projects.util.ProjectSampleUtil;
-import com.microsoft.azuretools.SparkToolsAnchor;
 import com.microsoft.azuretools.azurecommons.helpers.NotNull;
 import com.microsoft.tooling.msservices.components.DefaultLoader;
 import org.jetbrains.concurrency.Promise;
@@ -40,9 +38,6 @@ import org.jetbrains.idea.maven.project.MavenProjectsManager;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Collections;
 
 public class MavenProjectGenerator {
@@ -73,6 +68,7 @@ public class MavenProjectGenerator {
         }
     }
 
+    @SuppressWarnings("checkstyle:FallThrough")
     private void createDirectories(String root) throws IOException {
         switch (this.templatesType) {
             case ScalaFailureTaskDebugSample:
@@ -115,7 +111,17 @@ public class MavenProjectGenerator {
                 file = StreamUtil.getResourceFile("/hdinsight/templates/pom/spark_2_2_0_pom.xml");
                 break;
             case SPARK_2_3_0:
-                file = StreamUtil.getResourceFile("/hdinsight/templates/pom/spark_2_3_0_pom.xml");
+                file = this.templatesType != HDInsightTemplatesType.ScalaFailureTaskDebugSample ?
+                        StreamUtil.getResourceFile("/hdinsight/templates/pom/spark_2_3_0_pom.xml") :
+                        StreamUtil.getResourceFile("/hdinsight/templates/pom/spark_2_3_0_failure_task_debug_pom.xml");
+                break;
+            case SPARK_2_3_2:
+                file = this.templatesType != HDInsightTemplatesType.ScalaFailureTaskDebugSample ?
+                        StreamUtil.getResourceFile("/hdinsight/templates/pom/spark_2_3_2_pom.xml") :
+                        StreamUtil.getResourceFile("/hdinsight/templates/pom/spark_2_3_2_failure_task_debug_pom.xml");
+                break;
+            case SPARK_2_4_0:
+                file = StreamUtil.getResourceFile("/hdinsight/templates/pom/spark_2_4_0_pom.xml");
                 break;
         }
 
@@ -188,8 +194,9 @@ public class MavenProjectGenerator {
                         "/hdinsight/templates/log4j.properties"
                 }, root + "/src/main/resources");
 
-                Path sparkToolsLibSource = Paths.get(PathUtil.getJarPathForClass(SparkToolsAnchor.class));
-                Files.copy(sparkToolsLibSource, Paths.get(root, "lib").resolve(sparkToolsLibSource.getFileName()));
+                ProjectSampleUtil.copyFileToPath(new String[]{
+                        "/spark/" + SparkToolsLib.INSTANCE.getJarFileName(this.sparkVersion)
+                }, root + "/lib");
 
                 break;
         }

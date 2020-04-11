@@ -1,36 +1,36 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
- * <p/>
+ *
  * All rights reserved.
- * <p/>
+ *
  * MIT License
- * <p/>
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
  * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- * <p/>
+ *
  * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
  * the Software.
- * <p/>
+ *
  * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
 package com.microsoft.tooling.msservices.serviceexplorer;
 
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
-import com.microsoft.tooling.msservices.components.DefaultLoader;
 import com.microsoft.azuretools.azurecommons.helpers.AzureCmdException;
 import com.microsoft.azuretools.core.mvp.ui.base.NodeContent;
+import com.microsoft.tooling.msservices.components.DefaultLoader;
 
-import javax.swing.*;
-import javax.swing.tree.TreePath;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -48,7 +48,7 @@ public abstract class RefreshableNode extends Node {
     public RefreshableNode(String id, String name, Node parent, String iconPath, boolean delayActionLoading) {
         super(id, name, parent, iconPath, delayActionLoading);
     }
-    
+
     @Override
     protected void loadActions() {
         addAction(REFRESH, DefaultLoader.getUIHelper().isDarkTheme() ? REFRESH_ICON_DARK : REFRESH_ICON_LIGHT, new NodeActionListener() {
@@ -127,51 +127,62 @@ public abstract class RefreshableNode extends Node {
                     public void run() {
                         if (!loading) {
                             final String nodeName = node.getName();
-                            updateName(nodeName + " (Refreshing...)", null);
-//                        node.setName(nodeName + " (Refreshing...)");
+                            DefaultLoader.getIdeHelper().invokeLater(new Runnable() {
+                                @Override
+                                public void run() {
+                                    updateName(nodeName + " (Refreshing...)", null);
+                                }
+                            });
 
                             Futures.addCallback(future, new FutureCallback<List<Node>>() {
                                 @Override
                                 public void onSuccess(List<Node> nodes) {
-                                    updateName(nodeName, null);
-                                    updateNodeNameAfterLoading();
-                                    expandNodeAfterLoading();
+                                    DefaultLoader.getIdeHelper().invokeLater(new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            if (node.getName().endsWith("(Refreshing...)")) {
+                                                updateName(nodeName, null);
+                                            }
+                                            updateNodeNameAfterLoading();
+                                            expandNodeAfterLoading();
+                                        }
+                                    });
                                 }
 
                                 @Override
                                 public void onFailure(Throwable throwable) {
-                                    updateName(nodeName, throwable);
-                                    updateNodeNameAfterLoading();
-                                    expandNodeAfterLoading();
+                                    DefaultLoader.getIdeHelper().invokeLater(new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            updateName(nodeName, throwable);
+                                            updateNodeNameAfterLoading();
+                                            expandNodeAfterLoading();
+                                        }
+                                    });
                                 }
-                            });
+                            }, MoreExecutors.directExecutor());
                             node.refreshItems(future, forceRefresh);
                         }
                     }
 
                     private void updateName(String name, final Throwable throwable) {
-                        DefaultLoader.getIdeHelper().invokeAndWait(new Runnable() {
-                            @Override
-                            public void run() {
-                                node.setName(name);
+                        node.setName(name);
 
-                                if (throwable != null) {
-                                    DefaultLoader.getUIHelper().showException("An error occurred while attempting " +
-                                                    "to load " + node.getName() + ".",
-                                            throwable,
-                                            "MS Azure Explorer - Error Loading " + node.getName(),
-                                            false,
-                                            true);
-                                }
-                            }
-                        });
+                        if (throwable != null) {
+                            DefaultLoader.getUIHelper().showException("An error occurred while attempting " +
+                                            "to load " + node.getName() + ".",
+                                    throwable,
+                                    "MS Azure Explorer - Error Loading " + node.getName(),
+                                    false,
+                                    true);
+                        }
                     }
                 }
         );
 
         return future;
     }
-    
+
     public void showNode(HashMap<String, ArrayList<NodeContent>> nodeMap) {
         for (String sid: nodeMap.keySet()) {
             for (NodeContent content: nodeMap.get(sid)) {

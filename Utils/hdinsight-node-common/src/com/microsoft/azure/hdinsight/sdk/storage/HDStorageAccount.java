@@ -1,24 +1,25 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
- * <p/>
+ *
  * All rights reserved.
- * <p/>
+ *
  * MIT License
- * <p/>
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
  * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- * <p/>
+ *
  * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
  * the Software.
- * <p/>
+ *
  * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
 package com.microsoft.azure.hdinsight.sdk.storage;
 
 import com.microsoft.azure.hdinsight.sdk.cluster.IClusterDetail;
@@ -27,10 +28,12 @@ import com.microsoft.azuretools.azurecommons.helpers.Nullable;
 import com.microsoft.tooling.msservices.model.storage.ClientStorageAccount;
 
 public class HDStorageAccount extends ClientStorageAccount implements IHDIStorageAccount {
+    public final static String DefaultScheme = "wasbs";
     private String fullStorageBlobName;
     private boolean isDefaultStorageAccount;
     private String defaultContainer;
     private IClusterDetail clusterDetail;
+    public String scheme;
 
     public HDStorageAccount(@Nullable IClusterDetail clusterDetail, String fullStorageBlobName, String key, boolean isDefault, String defaultContainer) {
         super(getStorageShortName(fullStorageBlobName));
@@ -39,6 +42,7 @@ public class HDStorageAccount extends ClientStorageAccount implements IHDIStorag
         this.isDefaultStorageAccount = isDefault;
         this.defaultContainer = defaultContainer;
         this.clusterDetail = clusterDetail;
+        this.scheme = DefaultScheme;
     }
 
     @Override
@@ -52,8 +56,8 @@ public class HDStorageAccount extends ClientStorageAccount implements IHDIStorag
     }
 
     @Override
-    public StorageAccountTypeEnum getAccountType() {
-        return StorageAccountTypeEnum.BLOB;
+    public StorageAccountType getAccountType() {
+        return StorageAccountType.BLOB;
     }
 
     @Override
@@ -71,6 +75,10 @@ public class HDStorageAccount extends ClientStorageAccount implements IHDIStorag
 
     public String getDefaultContainer() {
         return defaultContainer;
+    }
+
+    public String getscheme() {
+        return scheme;
     }
 
     private static String getStorageShortName(@NotNull final String fullStorageBlobName) {

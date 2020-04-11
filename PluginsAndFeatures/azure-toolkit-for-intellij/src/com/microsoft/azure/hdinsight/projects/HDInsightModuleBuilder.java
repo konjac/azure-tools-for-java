@@ -1,25 +1,28 @@
 /*
  * Copyright (c) Microsoft Corporation
- * <p/>
+ *
  * All rights reserved.
- * <p/>
+ *
  * MIT License
- * <p/>
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
  * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- * <p/>
+ *
  * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
  * the Software.
- * <p/>
+ *
  * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
 package com.microsoft.azure.hdinsight.projects;
+
+import static com.microsoft.azuretools.telemetry.TelemetryConstants.HDINSIGHT;
 
 import com.intellij.ide.util.projectWizard.*;
 import com.intellij.openapi.Disposable;
@@ -39,8 +42,11 @@ import com.intellij.packaging.elements.PackagingElementFactory;
 import com.intellij.packaging.impl.artifacts.JarArtifactType;
 import com.intellij.platform.ProjectTemplate;
 import com.microsoft.azure.hdinsight.common.CommonConst;
+import com.microsoft.azure.hdinsight.common.IconPathBuilder;
 import com.microsoft.azure.hdinsight.projects.ui.HDInsightProjectTypeStep;
 import com.microsoft.azuretools.telemetry.AppInsightsClient;
+import com.microsoft.azuretools.telemetrywrapper.EventType;
+import com.microsoft.azuretools.telemetrywrapper.EventUtil;
 import com.microsoft.intellij.hdinsight.messages.HDInsightBundle;
 import org.jdom.JDOMException;
 import org.jetbrains.annotations.NotNull;
@@ -77,12 +83,14 @@ public class HDInsightModuleBuilder extends JavaModuleBuilder implements ModuleB
 
     @Override
     public Icon getNodeIcon() {
-        return IconLoader.getIcon(CommonConst.ProductIConPath);
+        return IconLoader.getIcon(IconPathBuilder
+                .custom(CommonConst.ProductIconName)
+                .build());
     }
 
     @Override
     public String getPresentableName() {
-        return "Azure Spark/HDInsight";
+        return "Apache Spark/HDInsight";
     }
 
     @Override
@@ -140,7 +148,7 @@ public class HDInsightModuleBuilder extends JavaModuleBuilder implements ModuleB
                                 // TODO: Remove hardcoded packaging here with spark-tools being independent.
                                 File sparkToolsJar = Paths.get(Objects.requireNonNull(module.getProject().getBasePath()),
                                                                "lib",
-                                                               "spark-tools-0.1.0.jar").toFile();
+                                                               SparkToolsLib.INSTANCE.getJarFileName(this.sparkVersion)).toFile();
 
                                 artifact.getRootElement().addOrFindChild(
                                         artifactPackagingFactory.createExtractedDirectoryWithParentDirectories(
@@ -209,14 +217,24 @@ public class HDInsightModuleBuilder extends JavaModuleBuilder implements ModuleB
 
         if (templatesType == HDInsightTemplatesType.Java) {
             AppInsightsClient.create(HDInsightBundle.message("SparkProjectSystemJavaCreation"), null, hdiProperties);
+            EventUtil.logEvent(EventType.info, HDINSIGHT, HDInsightBundle.message("SparkProjectSystemJavaCreation"),
+                hdiProperties, null);
         } else if (templatesType == HDInsightTemplatesType.Scala) {
             AppInsightsClient.create(HDInsightBundle.message("SparkProjectSystemScalaCreation"), null, hdiProperties);
+            EventUtil.logEvent(EventType.info, HDINSIGHT, HDInsightBundle.message("SparkProjectSystemScalaCreation"),
+                hdiProperties, null);
         } else if (templatesType == HDInsightTemplatesType.ScalaClusterSample) {
             AppInsightsClient.create(HDInsightBundle.message("SparkProjectSystemScalaSampleCreation"), null, hdiProperties);
+            EventUtil.logEvent(EventType.info, HDINSIGHT, HDInsightBundle.message("SparkProjectSystemScalaSampleCreation"),
+                    hdiProperties, null);
         } else if (templatesType == HDInsightTemplatesType.ScalaFailureTaskDebugSample) {
             AppInsightsClient.create(HDInsightBundle.message("SparkProjectSystemScalaFailureTaskDebugSampleCreation"), null, hdiProperties);
+            EventUtil.logEvent(EventType.info, HDINSIGHT,
+                HDInsightBundle.message("SparkProjectSystemScalaFailureTaskDebugSampleCreation"), hdiProperties, null);
         } else {
             AppInsightsClient.create(HDInsightBundle.message("SparkProjectSystemOtherCreation"), null, hdiProperties);
+            EventUtil.logEvent(EventType.info, HDINSIGHT,
+                HDInsightBundle.message("SparkProjectSystemOtherCreation"), hdiProperties, null);
         }
     }
 

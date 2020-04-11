@@ -1,24 +1,25 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
- * <p/>
+ *
  * All rights reserved.
- * <p/>
+ *
  * MIT License
- * <p/>
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
  * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- * <p/>
+ *
  * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
  * the Software.
- * <p/>
+ *
  * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
 package com.microsoft.azure.hdinsight.spark.jobs;
 
 import com.gargoylesoftware.htmlunit.BrowserVersion;
@@ -30,23 +31,28 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 import com.jcraft.jsch.*;
+import com.microsoft.azure.datalake.store.ADLStoreClient;
+import com.microsoft.azure.datalake.store.IfExists;
 import com.microsoft.azure.hdinsight.common.ClusterManagerEx;
 import com.microsoft.azure.hdinsight.common.HDInsightLoader;
 import com.microsoft.azure.hdinsight.common.MessageInfoType;
 import com.microsoft.azure.hdinsight.common.StreamUtil;
 import com.microsoft.azure.hdinsight.sdk.cluster.EmulatorClusterDetail;
-import com.microsoft.azure.hdinsight.sdk.cluster.HDInsightLivyLinkClusterDetail;
 import com.microsoft.azure.hdinsight.sdk.cluster.IClusterDetail;
 import com.microsoft.azure.hdinsight.sdk.cluster.LivyCluster;
+import com.microsoft.azure.hdinsight.sdk.cluster.MfaEspCluster;
 import com.microsoft.azure.hdinsight.sdk.common.AuthenticationException;
 import com.microsoft.azure.hdinsight.sdk.common.HDIException;
+import com.microsoft.azure.hdinsight.sdk.common.HttpObservable;
 import com.microsoft.azure.hdinsight.sdk.common.livy.interactive.SparkSession;
 import com.microsoft.azure.hdinsight.sdk.io.spark.ClusterFileBase64BufferedOutputStream;
 import com.microsoft.azure.hdinsight.sdk.rest.yarn.rm.App;
 import com.microsoft.azure.hdinsight.sdk.rest.yarn.rm.ApplicationMasterLogs;
 import com.microsoft.azure.hdinsight.sdk.storage.HDStorageAccount;
 import com.microsoft.azure.hdinsight.sdk.storage.IHDIStorageAccount;
-import com.microsoft.azure.hdinsight.sdk.storage.StorageAccountTypeEnum;
+import com.microsoft.azure.hdinsight.sdk.storage.StorageAccountType;
+import com.microsoft.azure.hdinsight.sdk.storage.webhdfs.WebHdfsParamsBuilder;
+import com.microsoft.azure.hdinsight.spark.common.SparkBatchEspMfaSubmission;
 import com.microsoft.azure.hdinsight.spark.common.SparkBatchSubmission;
 import com.microsoft.azure.hdinsight.spark.jobs.livy.LivyBatchesInformation;
 import com.microsoft.azure.hdinsight.spark.jobs.livy.LivySession;
@@ -63,21 +69,29 @@ import com.sun.net.httpserver.HttpExchange;
 import org.apache.commons.codec.binary.Base64OutputStream;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpResponse;
-import org.apache.http.HttpStatus;
+import org.apache.http.*;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.HttpClient;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpUriRequest;
+import org.apache.http.client.methods.RequestBuilder;
+import org.apache.http.client.utils.URIBuilder;
+import org.apache.http.entity.BufferedHttpEntity;
+import org.apache.http.entity.ContentType;
+import org.apache.http.entity.InputStreamEntity;
 import org.apache.http.impl.client.BasicCredentialsProvider;
+import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import rx.Observable;
 import rx.Observer;
-import rx.*;
+import rx.Single;
+import rx.Subscription;
 import rx.schedulers.Schedulers;
 
 import java.awt.*;
@@ -86,15 +100,17 @@ import java.lang.reflect.Type;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.net.UnknownServiceException;
 import java.util.*;
-import java.util.AbstractMap.SimpleImmutableEntry;
 import java.util.List;
+import java.util.AbstractMap.SimpleImmutableEntry;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static com.microsoft.azure.hdinsight.common.MessageInfoType.Info;
+import static org.apache.http.HttpHeaders.AUTHORIZATION;
 import static rx.exceptions.Exceptions.propagate;
 
 public class JobUtils {
@@ -227,35 +243,43 @@ public class JobUtils {
     }
 
     private static ApplicationMasterLogs getYarnLogsFromWebClient(@NotNull final IClusterDetail clusterDetail, @NotNull final String url) throws HDIException, IOException {
-        final CredentialsProvider credentialsProvider  =  new BasicCredentialsProvider();
-        credentialsProvider.setCredentials(AuthScope.ANY, new UsernamePasswordCredentials(clusterDetail.getHttpUserName(), clusterDetail.getHttpPassword()));
+        final String authCode = SparkBatchSubmission.getClusterSubmission(clusterDetail).getAuthCode();
 
-        String standerr = getInformationFromYarnLogDom(credentialsProvider, url, "stderr", 0, 0);
-        String standout = getInformationFromYarnLogDom(credentialsProvider, url, "stdout", 0, 0);
-        String directoryInfo = getInformationFromYarnLogDom(credentialsProvider, url, "directory.info", 0, 0);
+        String standerr = getInformationFromYarnLogDom(authCode, url, "stderr", 0, 0);
+        String standout = getInformationFromYarnLogDom(authCode, url, "stdout", 0, 0);
+        String directoryInfo = getInformationFromYarnLogDom(authCode, url, "directory.info", 0, 0);
 
         return new ApplicationMasterLogs(standout, standerr, directoryInfo);
     }
 
-    public static String getInformationFromYarnLogDom(final CredentialsProvider credentialsProvider,
+    public static String getInformationFromYarnLogDom(@Nullable String authCode,
                                                       @NotNull String baseUrl,
                                                       @NotNull String type,
                                                       long start,
                                                       int size) {
         final WebClient HTTP_WEB_CLIENT = new WebClient(BrowserVersion.CHROME);
+        HTTP_WEB_CLIENT.getOptions().setUseInsecureSSL(HttpObservable.isSSLCertificateValidationDisabled());
         HTTP_WEB_CLIENT.setCache(globalCache);
 
-        if (credentialsProvider != null) {
-            HTTP_WEB_CLIENT.setCredentialsProvider(credentialsProvider);
+        if (authCode != null) {
+            HTTP_WEB_CLIENT.addRequestHeader(AUTHORIZATION, authCode);
         }
 
+        return getInformationFromYarnLogDom(HTTP_WEB_CLIENT, baseUrl, type, start, size);
+    }
+
+    private static String getInformationFromYarnLogDom(@NotNull WebClient client,
+                                                      @NotNull String baseUrl,
+                                                      @NotNull String type,
+                                                      long start,
+                                                      int size) {
         URI url = null;
 
         try {
             url = new URI(baseUrl + "/").resolve(
                     String.format("%s?start=%d", type, start) +
                             (size <= 0 ? "" : String.format("&&end=%d", start + size)));
-            HtmlPage htmlPage = HTTP_WEB_CLIENT.getPage(url.toString());
+            HtmlPage htmlPage = client.getPage(url.toString());
 
             Iterator<DomElement> iterator = htmlPage.getElementById("navcell").getNextElementSibling().getChildElements().iterator();
 
@@ -317,14 +341,14 @@ public class JobUtils {
     /**
      * To create an Observable for specified Yarn container log type
      *
-     * @param credentialsProvider credential provider for HDInsight
+     * @param authCode the authCode in request's Authorization header
      * @param stop the stop observable to cancel the log fetch, refer to Observable.window() operation
      * @param containerLogUrl the contaniner log url
      * @param type the log type
      * @param blockSize the block size for one fetch, the value 0 for as many as possible
      * @return the log Observable
      */
-    public static Observable<String> createYarnLogObservable(@Nullable final CredentialsProvider credentialsProvider,
+    public static Observable<String> createYarnLogObservable(@Nullable final String authCode,
                                                              @Nullable final Observable<Object> stop,
                                                              @NotNull final String containerLogUrl,
                                                              @NotNull final String type,
@@ -349,7 +373,7 @@ public class JobUtils {
             try {
                 while (!ob.isUnsubscribed()) {
                     logs = JobUtils.getInformationFromYarnLogDom(
-                            credentialsProvider, containerLogUrl, type, nextStart, blockSize);
+                            authCode, containerLogUrl, type, nextStart, blockSize);
                     int lastLineBreak = logs.lastIndexOf('\n');
 
                     if (lastLineBreak < 0) {
@@ -386,7 +410,7 @@ public class JobUtils {
             } finally {
                 // Get the rest logs from history server
                 // Don't worry about the log is moved to history server, the YarnUI can do URL redirect by itself
-                logs = JobUtils.getInformationFromYarnLogDom(credentialsProvider, containerLogUrl, type, nextStart, 0);
+                logs = JobUtils.getInformationFromYarnLogDom(authCode, containerLogUrl, type, nextStart, 0);
 
                 new BufferedReader(new StringReader(remainedLine + logs)).lines().forEach(ob::onNext);
             }
@@ -397,10 +421,21 @@ public class JobUtils {
     }
 
     public static HttpEntity getEntity(@NotNull final IClusterDetail clusterDetail, @NotNull final String url) throws IOException, HDIException {
-        provider.setCredentials(AuthScope.ANY, new UsernamePasswordCredentials(clusterDetail.getHttpUserName(), clusterDetail.getHttpPassword()));
-        final HttpClient client = HttpClients.custom()
-                .useSystemProperties()
-                .setDefaultCredentialsProvider(provider).build();
+        final HttpClient client;
+        if (clusterDetail instanceof MfaEspCluster) {
+            final String tenantId = ((MfaEspCluster) clusterDetail).getTenantId();
+
+            if (tenantId == null) {
+                throw new UnknownServiceException("Can't get HIB cluster Tenant ID");
+            }
+
+            client = new SparkBatchEspMfaSubmission(tenantId, clusterDetail.getName()).getHttpClient();
+        } else {
+            provider.setCredentials(AuthScope.ANY, new UsernamePasswordCredentials(clusterDetail.getHttpUserName(), clusterDetail.getHttpPassword()));
+            client = HttpClients.custom()
+                    .useSystemProperties()
+                    .setDefaultCredentialsProvider(provider).build();
+        }
 
         final HttpGet get = new HttpGet(url);
         final HttpResponse response = client.execute(get);
@@ -413,7 +448,7 @@ public class JobUtils {
     }
 
     @Nullable
-    private static BlobContainer getSparkClusterDefaultContainer(ClientStorageAccount storageAccount, String dealtContainerName) throws AzureCmdException {
+    private static BlobContainer getSparkClusterContainer(ClientStorageAccount storageAccount, String dealtContainerName) throws AzureCmdException {
         List<BlobContainer> containerList = StorageClientSDKManager.getManager().getBlobContainers(storageAccount.getConnectionString());
         for (BlobContainer container : containerList) {
             if (container.getName().toLowerCase().equals(dealtContainerName.toLowerCase())) {
@@ -427,22 +462,21 @@ public class JobUtils {
     @Deprecated
     public static String uploadFileToAzure(@NotNull File file,
                                            @NotNull IHDIStorageAccount storageAccount,
-                                           @NotNull String defaultContainerName,
+                                           @NotNull String containerName,
                                            @NotNull String uploadFolderPath,
                                            @NotNull Observer<SimpleImmutableEntry<MessageInfoType, String>> logSubject,
                                            @Nullable CallableSingleArg<Void, Long> uploadInProcessCallback) throws Exception {
-        if(storageAccount.getAccountType() == StorageAccountTypeEnum.BLOB) {
+        if(storageAccount.getAccountType() == StorageAccountType.BLOB) {
             try (FileInputStream fileInputStream = new FileInputStream(file)) {
                 try (BufferedInputStream bufferedInputStream = new BufferedInputStream(fileInputStream)) {
                     HDStorageAccount blobStorageAccount = (HDStorageAccount) storageAccount;
-                    BlobContainer defaultContainer = getSparkClusterDefaultContainer(blobStorageAccount, defaultContainerName);
-
-                    if (defaultContainer == null) {
-                        throw new UnsupportedOperationException("Can't get the default container.");
+                    BlobContainer container = getSparkClusterContainer(blobStorageAccount, containerName);
+                    if (container == null) {
+                        throw new IllegalArgumentException("Can't get the valid container.");
                     }
 
                     String path = String.format("SparkSubmission/%s/%s", uploadFolderPath, file.getName());
-                    String uploadedPath = String.format("wasbs://%s@%s/%s", defaultContainerName, blobStorageAccount.getFullStorageBlobName(), path);
+                    String uploadedPath = String.format("wasbs://%s@%s/%s", containerName, blobStorageAccount.getFullStorageBlobName(), path);
 
                     logSubject.onNext(new SimpleImmutableEntry<>(Info,
                             String.format("Begin uploading file %s to Azure Blob Storage Account %s ...",
@@ -450,7 +484,7 @@ public class JobUtils {
 
                     StorageClientSDKManager.getManager().uploadBlobFileContent(
                             blobStorageAccount.getConnectionString(),
-                            defaultContainer,
+                            container,
                             path,
                             bufferedInputStream,
                             uploadInProcessCallback,
@@ -463,7 +497,7 @@ public class JobUtils {
                     return uploadedPath;
                 }
             }
-        } else if(storageAccount.getAccountType() == StorageAccountTypeEnum.ADLS) {
+        } else if(storageAccount.getAccountType() == StorageAccountType.ADLS) {
             String uploadPath = String.format("adl://%s.azuredatalakestore.net%s%s", storageAccount.getName(), storageAccount.getDefaultContainerOrRootPath(), "SparkSubmission");
             logSubject.onNext(new SimpleImmutableEntry<>(Info,
                               String.format("Begin uploading file %s to Azure Datalake store %s ...", file.getPath(), uploadPath)));
@@ -565,6 +599,9 @@ public class JobUtils {
                     SparkSession::create,
                     SparkSession::close)
                     .map(sparkSession -> {
+                        sparkSession.getCtrlSubject()
+                                .subscribe(logSubject::onNext, logSubject::onError, logSubject::onCompleted);
+
                         ClusterFileBase64BufferedOutputStream clusterFileBase64Out = new ClusterFileBase64BufferedOutputStream(
                                 sparkSession, destUri);
                         Base64OutputStream base64Enc = new Base64OutputStream(clusterFileBase64Out, true);
@@ -613,6 +650,32 @@ public class JobUtils {
                                 null));
     }
 
+    // Have to catch IOException in subscribe
+    @NotNull
+    public static Observable<String> deployArtifactToADLS(@NotNull String artifactLocalPath,
+                                                 @NotNull String adlRootPath,
+                                                 @NotNull String accessToken) {
+        return Observable.fromCallable(() -> {
+            File localFile = new File(artifactLocalPath);
+
+            URI remote = URI.create(adlRootPath)
+                    .resolve("SparkSubmission/")
+                    .resolve(getFormatPathByDate() + "/")
+                    .resolve(localFile.getName());
+
+            ADLStoreClient storeClient = ADLStoreClient.createClient(remote.getHost(), accessToken);
+
+            try (OutputStream adlsOutputStream = storeClient.createFile(remote.getPath(), IfExists.OVERWRITE, "755", true)) {
+                long size = IOUtils.copyLarge(new FileInputStream(localFile), adlsOutputStream);
+
+                adlsOutputStream.flush();
+                adlsOutputStream.close();
+
+                return remote.toString();
+            }
+        });
+    }
+
     public static Observable<String> deployArtifact(@NotNull String artifactLocalPath,
                                                     @NotNull final IHDIStorageAccount storageAccount,
                                                     @NotNull Observer<SimpleImmutableEntry<MessageInfoType, String>> logSubject) {
@@ -647,27 +710,90 @@ public class JobUtils {
         });
     }
 
+    public static Observable<String> deployArtifact(@NotNull SparkBatchSubmission submission,
+                                                    @NotNull String destinationRootPath,
+                                                    @NotNull String artifactPath) {
+        return Observable.fromCallable(() -> {
+            File file = new File(artifactPath);
+            String webHdfsUploadPath = destinationRootPath.concat(file.getName());
+            String redirectUri = null;
+
+            List<NameValuePair> params = new WebHdfsParamsBuilder("CREATE")
+                    .setOverwrite("true")
+                    .build();
+
+            URIBuilder uriBuilder = new URIBuilder(webHdfsUploadPath);
+            uriBuilder.addParameters(params);
+
+            HttpUriRequest req = RequestBuilder
+                    .put(uriBuilder.build())
+                    .build();
+
+            CloseableHttpClient httpclient = submission.getHttpClient();
+            try (CloseableHttpResponse response = httpclient.execute(req)) {
+                //two steps to upload via webhdfs
+                // 1.put request the get 307 redirect uri from response
+                // 2.put redirect request with file content as setEntity
+                redirectUri = response
+                        .getFirstHeader("Location")
+                        .getValue();
+
+                if (StringUtils.isBlank(redirectUri)) {
+                    throw new UnknownServiceException("can not get valid redirect uri using webhdfs");
+                }
+            } catch (Exception ex) {
+                throw new UnknownServiceException("using webhdfs encounter problem:".concat(ex.toString()));
+            }
+
+            InputStreamEntity reqEntity = new InputStreamEntity(
+                    new FileInputStream(file),
+                    -1,
+                    ContentType.APPLICATION_OCTET_STREAM);
+            reqEntity.setChunked(true);
+            BufferedHttpEntity reqEntityBuf = new BufferedHttpEntity(reqEntity);
+
+            //setup url with redirect url and entity ,config 100 continue to header
+            req = RequestBuilder
+                    .put(redirectUri)
+                    .setEntity(reqEntityBuf)
+                    .setConfig(RequestConfig.custom().setExpectContinueEnabled(true).build())
+                    .build();
+
+            // execute put request
+            try (CloseableHttpResponse putResp = httpclient.execute(req)) {
+                params = new WebHdfsParamsBuilder("OPEN")
+                        .build();
+                uriBuilder = new URIBuilder(webHdfsUploadPath);
+                uriBuilder.addParameters(params);
+
+                //return get file uri
+                return uriBuilder.build().toString();
+            }
+        });
+    }
+
     public static Cache getGlobalCache() {
         return globalCache;
     }
 
-    public static AbstractMap.SimpleImmutableEntry<Integer, Map<String, List<String>>>
+    public static AbstractMap.SimpleImmutableEntry<Integer, List<Header>>
     authenticate(IClusterDetail clusterDetail) throws HDIException, IOException {
         SparkBatchSubmission submission = SparkBatchSubmission.getInstance();
-        if (!StringUtils.isEmpty(clusterDetail.getHttpUserName()) && !StringUtils.isEmpty(clusterDetail.getHttpPassword())) {
-            submission.setUsernamePasswordCredential(clusterDetail.getHttpUserName(), clusterDetail.getHttpPassword());
-        }
-
         String livyUrl = clusterDetail instanceof LivyCluster ? ((LivyCluster) clusterDetail).getLivyBatchUrl() : null;
         if (livyUrl == null) {
             throw new IOException("Can't get livy connection Url");
         }
 
-        com.microsoft.azure.hdinsight.sdk.common.HttpResponse response = submission.getHttpResponseViaHead(livyUrl);
+        if (!StringUtils.isEmpty(clusterDetail.getHttpUserName()) && !StringUtils.isEmpty(clusterDetail.getHttpPassword())) {
+            submission.setUsernamePasswordCredential(clusterDetail.getHttpUserName(), clusterDetail.getHttpPassword());
+        }
+
+        com.microsoft.azure.hdinsight.sdk.common.HttpResponse response = clusterDetail instanceof MfaEspCluster
+                ? submission.negotiateAuthMethodWithResp(livyUrl)
+                : submission.getHttpResponseViaHead(livyUrl);
 
         int statusCode = response.getCode();
-
-        if (statusCode >= 200 && statusCode < 300) {
+        if (statusCode >= 200 && statusCode <= 302) {
             return new AbstractMap.SimpleImmutableEntry<>(statusCode, response.getHeaders());
         }
 

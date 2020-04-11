@@ -22,17 +22,17 @@
 
 package com.microsoft.azure.hdinsight.spark.common;
 
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.message.BasicHeader;
+
 import com.microsoft.azuretools.adauth.AuthException;
 import com.microsoft.azuretools.adauth.PromptBehavior;
-import com.microsoft.azuretools.authmanage.AdAuthManager;
 import com.microsoft.azuretools.authmanage.AuthMethodManager;
 import com.microsoft.azuretools.authmanage.CommonSettings;
 import com.microsoft.azuretools.azurecommons.helpers.NotNull;
 import com.microsoft.azuretools.azurecommons.helpers.Nullable;
 import com.microsoft.azuretools.sdkmanage.AzureManager;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.message.BasicHeader;
 
 import java.io.IOException;
 import java.net.URI;
@@ -76,17 +76,18 @@ public class SparkBatchAzureSubmission extends SparkBatchSubmission {
             throw new AuthException("Not signed in. Can't send out the request.");
         }
 
-        return AdAuthManager.getInstance().getAccessToken(getTenantId(), getResourceEndpoint(), PromptBehavior.Auto);
+        return azureManager.getAccessToken(getTenantId(), getResourceEndpoint(), PromptBehavior.Auto);
     }
 
     @NotNull
     @Override
-    protected CloseableHttpClient getHttpClient() throws IOException {
+    public CloseableHttpClient getHttpClient() throws IOException {
         return HttpClients.custom()
                 .useSystemProperties()
                 .setDefaultHeaders(Arrays.asList(
                         new BasicHeader("Authorization", "Bearer " + getAccessToken()),
                         new BasicHeader("x-ms-kobo-account-name", getAccountName())))
+                .setSSLSocketFactory(getSSLSocketFactory())
                 .build();
     }
 

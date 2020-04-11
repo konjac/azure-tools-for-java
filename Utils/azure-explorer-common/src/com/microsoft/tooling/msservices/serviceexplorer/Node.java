@@ -1,31 +1,38 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
- * <p/>
+ *
  * All rights reserved.
- * <p/>
+ *
  * MIT License
- * <p/>
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
  * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- * <p/>
+ *
  * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
  * the Software.
- * <p/>
+ *
  * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
 package com.microsoft.tooling.msservices.serviceexplorer;
 
 import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterators;
+import com.microsoft.azuretools.authmanage.AuthMethodManager;
+import com.microsoft.azuretools.azurecommons.helpers.AzureCmdException;
+import com.microsoft.azuretools.azurecommons.helpers.NotNull;
 import com.microsoft.azuretools.core.mvp.ui.base.MvpView;
 import com.microsoft.azuretools.core.mvp.ui.base.NodeContent;
+import com.microsoft.azuretools.sdkmanage.AzureManager;
+import com.microsoft.azuretools.telemetry.BasicTelemetryProperty;
+import com.microsoft.azuretools.telemetry.TelemetryConstants;
 import com.microsoft.tooling.msservices.components.DefaultLoader;
 import com.microsoft.tooling.msservices.helpers.Name;
 import com.microsoft.tooling.msservices.helpers.collections.ObservableList;
@@ -34,14 +41,18 @@ import javax.swing.*;
 import javax.swing.tree.TreePath;
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
+import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-public class Node implements MvpView {
+public class Node implements MvpView, BasicTelemetryProperty {
     private static final String CLICK_ACTION = "click";
+    public static final String REST_SEGMENT_JOB_MANAGEMENT_TENANTID = "/#@";
+    public static final String REST_SEGMENT_JOB_MANAGEMENT_RESOURCE = "/resource";
+    public static final String OPEN_RESOURCES_IN_PORTAL_FAILED = "Fail to open resources in portal.";
 
     protected static Map<Class<? extends Node>, ImmutableList<Class<? extends NodeActionListener>>> node2Actions;
 
@@ -71,7 +82,7 @@ public class Node implements MvpView {
     public Node(String id, String name, Node parent, String iconPath) {
         this(id, name, parent, iconPath, false);
     }
-    
+
     public Node(String id, String name, Node parent, String iconPath, boolean delayActionLoading) {
         this.id = id;
         this.name = name;
@@ -82,7 +93,7 @@ public class Node implements MvpView {
             loadActions();
         }
     }
-    
+
     public String getId() {
         return id;
     }
@@ -203,7 +214,8 @@ public class Node implements MvpView {
     public NodeAction addAction(String name, NodeActionListener actionListener) {
         NodeAction nodeAction = getNodeActionByName(name);
         if (nodeAction == null) {
-            addAction(nodeAction = new NodeAction(this, name));
+            nodeAction = new NodeAction(this, name);
+            addAction(nodeAction);
         }
         nodeAction.addListener(actionListener);
         return nodeAction;
@@ -251,7 +263,8 @@ public class Node implements MvpView {
         }
     }
 
-    protected NodeActionListener createNodeActionListener(Class<? extends NodeActionListener> listenerClass) throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException {
+    protected NodeActionListener createNodeActionListener(Class<? extends NodeActionListener> listenerClass)
+            throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException {
         Constructor constructor = listenerClass.getDeclaredConstructor(getClass());
 
         // create an instance passing this object as a constructor argument
@@ -270,9 +283,9 @@ public class Node implements MvpView {
         if (actions != null) {
             try {
                 for (Class<? extends NodeActionListener> actionListener : actions) {
-                    Name name = actionListener.getAnnotation(Name.class);
-                    if (name != null) {
-                        addAction(name.value(), createNodeActionListener(actionListener));
+                    Name nameAnnotation = actionListener.getAnnotation(Name.class);
+                    if (nameAnnotation != null) {
+                        addAction(nameAnnotation.value(), createNodeActionListener(actionListener));
                     }
                 }
             } catch (InstantiationException e) {
@@ -376,8 +389,34 @@ public class Node implements MvpView {
     }
 
     public void removeNode(String sid, String id, Node node) { }
-    
+
     public Node createNode(Node parent, String sid, NodeContent content) {
         return new Node(content.getId(), content.getName());
+    }
+
+    @Override
+    @NotNull
+    public String getServiceName() {
+        return TelemetryConstants.ACTION;
+    }
+
+    public void openResourcesInPortal(String subscriptionId, String resourceRelativePath) throws AzureCmdException {
+        try {
+            final AzureManager azureManager = AuthMethodManager.getInstance().getAzureManager();
+            // not signed in
+            if (azureManager == null) {
+                return;
+            }
+            final String portalUrl = azureManager.getPortalUrl();
+            final String tenantId = azureManager.getTenantIdBySubscription(subscriptionId);
+            String url = portalUrl
+                    + REST_SEGMENT_JOB_MANAGEMENT_TENANTID
+                    + tenantId
+                    + REST_SEGMENT_JOB_MANAGEMENT_RESOURCE
+                    + resourceRelativePath;
+            DefaultLoader.getIdeHelper().openLinkInBrowser(url);
+        } catch (IOException e) {
+            throw new AzureCmdException(OPEN_RESOURCES_IN_PORTAL_FAILED, e);
+        }
     }
 }

@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
  *
  * All rights reserved.
@@ -18,16 +18,17 @@
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
- *
  */
 
 package com.microsoft.azure.hdinsight.sdk.rest.azure.serverless.spark.models;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
  * Data Lake Analytics Spark Resource Pool creation request.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class CreateSparkResourcePoolItemParameters {
     /**
      * Label for spark worker / master. Possible values include: 'SparkMaster', 'SparkWorker'.
@@ -54,7 +55,7 @@ public class CreateSparkResourcePoolItemParameters {
     private Integer perInstanceMemoryInGB;
 
     /**
-     * Get the name value.
+     * Get label for spark worker / master. Possible values include: 'SparkMaster', 'SparkWorker'.
      *
      * @return the name value
      */
@@ -63,7 +64,7 @@ public class CreateSparkResourcePoolItemParameters {
     }
 
     /**
-     * Set the name value.
+     * Set label for spark worker / master. Possible values include: 'SparkMaster', 'SparkWorker'.
      *
      * @param name the name value to set
      * @return the CreateSparkResourcePoolItemParameters object itself.
@@ -74,7 +75,7 @@ public class CreateSparkResourcePoolItemParameters {
     }
 
     /**
-     * Get the targetInstanceCount value.
+     * Get number of instances of spark master or spark worker.
      *
      * @return the targetInstanceCount value
      */
@@ -83,7 +84,7 @@ public class CreateSparkResourcePoolItemParameters {
     }
 
     /**
-     * Set the targetInstanceCount value.
+     * Set number of instances of spark master or spark worker.
      *
      * @param targetInstanceCount the targetInstanceCount value to set
      * @return the CreateSparkResourcePoolItemParameters object itself.
@@ -94,7 +95,7 @@ public class CreateSparkResourcePoolItemParameters {
     }
 
     /**
-     * Get the perInstanceCoreCount value.
+     * Get number of cores in each started instance of spark master or spark workers.
      *
      * @return the perInstanceCoreCount value
      */
@@ -103,7 +104,7 @@ public class CreateSparkResourcePoolItemParameters {
     }
 
     /**
-     * Set the perInstanceCoreCount value.
+     * Set number of cores in each started instance of spark master or spark workers.
      *
      * @param perInstanceCoreCount the perInstanceCoreCount value to set
      * @return the CreateSparkResourcePoolItemParameters object itself.
@@ -114,7 +115,7 @@ public class CreateSparkResourcePoolItemParameters {
     }
 
     /**
-     * Get the perInstanceMemoryInGB value.
+     * Get allocated memory in GB for each started instance of spark master or spark workers.
      *
      * @return the perInstanceMemoryInGB value
      */
@@ -123,7 +124,7 @@ public class CreateSparkResourcePoolItemParameters {
     }
 
     /**
-     * Set the perInstanceMemoryInGB value.
+     * Set allocated memory in GB for each started instance of spark master or spark workers.
      *
      * @param perInstanceMemoryInGB the perInstanceMemoryInGB value to set
      * @return the CreateSparkResourcePoolItemParameters object itself.

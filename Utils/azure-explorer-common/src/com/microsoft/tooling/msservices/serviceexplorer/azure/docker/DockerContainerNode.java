@@ -1,24 +1,25 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
- * <p/>
+ *
  * All rights reserved.
- * <p/>
+ *
  * MIT License
- * <p/>
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
  * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- * <p/>
+ *
  * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
  * the Software.
- * <p/>
+ *
  * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
 package com.microsoft.tooling.msservices.serviceexplorer.azure.docker;
 
 import com.microsoft.azure.docker.AzureDockerHostsManager;
@@ -38,6 +39,12 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static com.microsoft.azure.docker.ops.utils.AzureDockerUtils.checkDockerContainerUrlAvailability;
+import static com.microsoft.azuretools.telemetry.TelemetryConstants.BROWSE_DOCKER_CONTAINER;
+import static com.microsoft.azuretools.telemetry.TelemetryConstants.DELETE_DOCKER_CONTAINER;
+import static com.microsoft.azuretools.telemetry.TelemetryConstants.DOCKER;
+import static com.microsoft.azuretools.telemetry.TelemetryConstants.RESTART_DOCKER_CONTAINER;
+import static com.microsoft.azuretools.telemetry.TelemetryConstants.START_DOCKER_CONTAINER;
+import static com.microsoft.azuretools.telemetry.TelemetryConstants.STOP_DOCKER_CONTAINER;
 
 public class DockerContainerNode extends AzureRefreshableNode implements TelemetryProperties {
   //TODO: Replace the icons with the real Docker host icons
@@ -134,7 +141,8 @@ public class DockerContainerNode extends AzureRefreshableNode implements Telemet
 
   @Override
   protected void loadActions() {
-    addAction(ACTION_OPEN_WEB_APP, DOCKER_CONTAINER_WEB_RUN_ICON, new NodeActionListener() {
+    addAction(ACTION_OPEN_WEB_APP, DOCKER_CONTAINER_WEB_RUN_ICON, new WrappedTelemetryNodeActionListener(DOCKER,
+        BROWSE_DOCKER_CONTAINER, new NodeActionListener() {
       @Override
       public void actionPerformed(NodeActionEvent e) {
         DefaultLoader.getIdeHelper().runInBackground(null, "Open Web Link", false, true, "Opening Web Link...", new Runnable() {
@@ -146,8 +154,9 @@ public class DockerContainerNode extends AzureRefreshableNode implements Telemet
           }
         });
       }
-    });
-    addAction(ACTION_STOP, ACTION_STOP_ICON, new NodeActionListener() {
+    }));
+    addAction(ACTION_STOP, ACTION_STOP_ICON, new WrappedTelemetryNodeActionListener(DOCKER, STOP_DOCKER_CONTAINER,
+        new NodeActionListener() {
       @Override
       public void actionPerformed(NodeActionEvent e) {
         DefaultLoader.getIdeHelper().runInBackground(null, "Stopping Docker Container", false, true, "Stopping Docker Container...", new Runnable() {
@@ -159,8 +168,9 @@ public class DockerContainerNode extends AzureRefreshableNode implements Telemet
           }
         });
       }
-    });
-    addAction(ACTION_START, ACTION_START_ICON, new NodeActionListener() {
+    }));
+    addAction(ACTION_START, ACTION_START_ICON, new WrappedTelemetryNodeActionListener(DOCKER, START_DOCKER_CONTAINER,
+        new NodeActionListener() {
       @Override
       public void actionPerformed(NodeActionEvent e) {
         DefaultLoader.getIdeHelper().runInBackground(null, "Starting Docker Container", false, true, "Starting Docker Container...", new Runnable() {
@@ -188,8 +198,9 @@ public class DockerContainerNode extends AzureRefreshableNode implements Telemet
           }
         });
       }
-    });
-    addAction(ACTION_RESTART, ACTION_START_ICON, new NodeActionListener() {
+    }));
+    addAction(ACTION_RESTART, ACTION_START_ICON, new WrappedTelemetryNodeActionListener(DOCKER, RESTART_DOCKER_CONTAINER,
+        new NodeActionListener() {
       @Override
       public void actionPerformed(NodeActionEvent e) {
         DefaultLoader.getIdeHelper().runInBackground(null, "Restarting Docker Container", false, true, "Restarting Docker Container...", new Runnable() {
@@ -202,7 +213,7 @@ public class DockerContainerNode extends AzureRefreshableNode implements Telemet
           }
         });
       }
-    });
+    }));
     addAction(ACTION_DELETE, ACTION_DELETE_ICON, new DeleteDockerContainerAction());
     super.loadActions();
   }
@@ -243,6 +254,16 @@ public class DockerContainerNode extends AzureRefreshableNode implements Telemet
 
     @Override
     protected void onSubscriptionsChanged(NodeActionEvent e) throws AzureCmdException {
+    }
+
+    @Override
+    protected String getServiceName(NodeActionEvent event) {
+      return DOCKER;
+    }
+
+    @Override
+    protected String getOperationName(NodeActionEvent event) {
+      return DELETE_DOCKER_CONTAINER;
     }
   }
 

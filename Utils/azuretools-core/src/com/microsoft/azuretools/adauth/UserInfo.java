@@ -45,7 +45,7 @@ public class UserInfo {
 
     /**
      * Get user id
-     * 
+     *
      * @return String value
      */
     public String getUniqueId() {
@@ -54,7 +54,7 @@ public class UserInfo {
 
     /**
      * Get given name
-     * 
+     *
      * @return String value
      */
     public String getGivenName() {
@@ -63,7 +63,7 @@ public class UserInfo {
 
     /**
      * Get family name
-     * 
+     *
      * @return String value
      */
     public String getFamilyName() {
@@ -72,7 +72,7 @@ public class UserInfo {
 
     /**
      * Get identity provider
-     * 
+     *
      * @return String value
      */
     public String getIdentityProvider() {
@@ -90,12 +90,27 @@ public class UserInfo {
             return null;
         }
     }
-    
+
+    static UserInfo createFromAdAlUserInfo(final com.microsoft.aad.adal4j.UserInfo adalUserInfo) {
+        if (adalUserInfo == null) {
+            return null;
+        }
+        final UserInfo userInfo = new UserInfo();
+        userInfo.uniqueId = adalUserInfo.getUniqueId();
+        userInfo.displayableId = adalUserInfo.getDisplayableId();
+        userInfo.givenName = adalUserInfo.getGivenName();
+        userInfo.familyName = adalUserInfo.getFamilyName();
+        userInfo.identityProvider = adalUserInfo.getIdentityProvider();
+        userInfo.passwordExpiresOn = adalUserInfo.getPasswordExpiresOn();
+        userInfo.passwordChangeUrl = adalUserInfo.getPasswordChangeUrl();
+        return userInfo;
+    }
+
     static UserInfo createFromIdTokens(final IdToken tokens){
         if (null == tokens) {
             return null;
         }
-        
+
   //      String tenantId = tokens.tenantId;
         String uniqueId = null;
         String displayableId = null;
@@ -111,7 +126,7 @@ public class UserInfo {
         else if (!StringUtils.isNullOrWhiteSpace(tokens.email)) {
             displayableId = tokens.email;
         }
-        
+
         final UserInfo userInfo = new UserInfo();
         userInfo.uniqueId = uniqueId;
         userInfo.tenantId = tokens.tenantId;
@@ -131,7 +146,7 @@ public class UserInfo {
         if (!StringUtils.isNullOrEmpty(tokens.passwordChangeUrl)) {
             userInfo.passwordChangeUrl = tokens.passwordChangeUrl;
         }
-        
+
         return userInfo;
     }
 

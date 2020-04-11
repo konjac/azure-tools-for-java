@@ -22,11 +22,16 @@
 
 package com.microsoft.azure.hdinsight.spark.console
 
-import org.jetbrains.plugins.scala.console.ScalaConsoleConfigurationType
-import org.jetbrains.plugins.scala.console.ScalaConsoleRunConfigurationFactory
+import com.intellij.execution.configurations.ConfigurationTypeUtil
+import org.jetbrains.plugins.scala.console.configuration.ScalaConsoleConfigurationType
+import org.jetbrains.plugins.scala.console.configuration.ScalaConsoleRunConfigurationFactory
 
 class SparkScalaLivyConsoleConfigurationType : ScalaConsoleConfigurationType() {
-    override fun confFactory(): ScalaConsoleRunConfigurationFactory = SparkScalaLivyConsoleRunConfigurationFactory(this)
+    companion object {
+        @JvmStatic
+        val instance by lazy { ConfigurationTypeUtil.findConfigurationType(SparkScalaLivyConsoleConfigurationType::class.java) }
+    }
+    fun sparkLivyConfFactory(): ScalaConsoleRunConfigurationFactory = SparkScalaLivyConsoleRunConfigurationFactory(this)
 
     override fun getDisplayName(): String = "Spark Livy Interactive Session Console(Scala)"
 

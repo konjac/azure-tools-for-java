@@ -1,18 +1,18 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
- * <p/>
+ *
  * All rights reserved.
- * <p/>
+ *
  * MIT License
- * <p/>
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
  * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- * <p/>
+ *
  * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
  * the Software.
- * <p/>
+ *
  * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
@@ -22,33 +22,36 @@
 
 package com.microsoft.azure.hdinsight.spark.common;
 
-import com.microsoft.azure.hdinsight.common.MessageInfoType;
 import com.microsoft.azure.hdinsight.common.logger.ILogger;
+import com.microsoft.azure.hdinsight.sdk.cluster.IClusterDetail;
 import com.microsoft.azure.hdinsight.spark.jobs.JobUtils;
 import com.microsoft.azuretools.azurecommons.helpers.NotNull;
-import org.apache.commons.lang3.StringUtils;
+import com.microsoft.azuretools.azurecommons.helpers.Nullable;
 import rx.Observable;
-import rx.Observer;
 
 import java.io.IOException;
-import java.net.URI;
 import java.net.UnknownServiceException;
-import java.util.AbstractMap;
-import java.util.AbstractMap.SimpleEntry;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 public class SparkBatchRemoteDebugJob extends SparkBatchJob implements ISparkBatchDebugJob, ILogger {
-    SparkBatchRemoteDebugJob(
+     SparkBatchRemoteDebugJob(
+            SparkSubmissionParameter submissionParameter,
+            SparkBatchSubmission sparkBatchSubmission) {
+        super(submissionParameter, sparkBatchSubmission);
+    }
+
+    public SparkBatchRemoteDebugJob(
+            @Nullable IClusterDetail cluster,
             SparkSubmissionParameter submissionParameter,
             SparkBatchSubmission sparkBatchSubmission,
-            @NotNull Observer<AbstractMap.SimpleImmutableEntry<MessageInfoType, String>> ctrlSubject) {
-        super(submissionParameter, sparkBatchSubmission, ctrlSubject);
+            @Nullable Deployable jobDeploy) {
+        super(cluster, submissionParameter, sparkBatchSubmission, jobDeploy);
     }
+
 
     /**
      * Get the Yarn container JDB listening port
@@ -59,7 +62,7 @@ public class SparkBatchRemoteDebugJob extends SparkBatchJob implements ISparkBat
      */
     public int getYarnContainerJDBListenPort(String containerLogUrl) throws UnknownServiceException {
         int port = this.parseJvmDebuggingPort(JobUtils.getInformationFromYarnLogDom(
-                this.getSubmission().getCredentialsProvider(),
+                this.getSubmission().getAuthCode(),
                 containerLogUrl,
                 "stdout",
                 -4096,
@@ -106,37 +109,6 @@ public class SparkBatchRemoteDebugJob extends SparkBatchJob implements ISparkBat
         Matcher debugPortMatcher = debugPortRegex.matcher(listening);
 
         return debugPortMatcher.matches() ? Integer.parseInt(debugPortMatcher.group("port")) : -1;
-    }
-
-
-    /**
-     * The factory helper function to create a SparkBatchRemoteDebugJob instance
-     *
-     * @param submissionParameter the Spark Batch Job submission parameter
-     * @param submission the Spark Batch Job submission
-     * @return a new SparkBatchRemoteDebugJob instance
-     * @throws DebugParameterDefinedException the exception for the Spark driver debug option exists
-     */
-    static public SparkBatchRemoteDebugJob factory(
-            SparkSubmissionParameter submissionParameter,
-            SparkBatchSubmission submission,
-            @NotNull Observer<AbstractMap.SimpleImmutableEntry<MessageInfoType, String>> ctrlSubject)
-            throws DebugParameterDefinedException {
-
-        SparkSubmissionParameter debugSubmissionParameter = convertToDebugParameter(submissionParameter);
-
-        return new SparkBatchRemoteDebugJob(debugSubmissionParameter, submission, ctrlSubject);
-    }
-
-    /**
-     * To get Executor from Yarn UI App Attempt page
-     */
-    public Observable<SimpleEntry<URI, String>> getExecutorsObservable() {
-        return getSparkJobYarnCurrentAppAttempt()
-                .flatMap(appAttempt -> getSparkJobYarnContainersObservable(appAttempt)
-                        .filter(hostContainerPair -> !StringUtils.equals(
-                                hostContainerPair.getValue(), appAttempt.getContainerId())))
-                .map(kv -> new SimpleEntry<>(kv.getKey(), kv.getValue()));
     }
 
     static public SparkSubmissionParameter convertToDebugParameter(SparkSubmissionParameter submissionParameter)
@@ -222,5 +194,15 @@ public class SparkBatchRemoteDebugJob extends SparkBatchJob implements ISparkBat
         } catch (Exception e) {
             return false;
         }
+    }
+
+    @Override
+    public SparkBatchRemoteDebugJob clone() {
+        return new SparkBatchRemoteDebugJob(
+                this.getCluster(),
+                this.getSubmissionParameter(),
+                this.getSubmission(),
+                this.getJobDeploy()
+        );
     }
 }

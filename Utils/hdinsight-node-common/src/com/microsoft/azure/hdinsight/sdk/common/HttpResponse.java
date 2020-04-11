@@ -1,42 +1,48 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
- * <p/>
+ *
  * All rights reserved.
- * <p/>
+ *
  * MIT License
- * <p/>
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
  * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- * <p/>
+ *
  * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
  * the Software.
- * <p/>
+ *
  * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
 package com.microsoft.azure.hdinsight.sdk.common;
 
-import java.util.HashMap;
+import org.apache.http.Header;
+
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
-import java.util.Map;
+import java.util.stream.Collectors;
 
 public class HttpResponse {
-    private int code;
-    private String message;
-    private Map<String, List<String>> headers;
-    private String content;
+    private final int code;
+    private final String message;
+    private final List<Header> headers;
+    private final String content;
 
-    public HttpResponse(int code, String message,Map<String, List<String>> headers,
-                        String content) {
+    public HttpResponse(final int code,
+                        final String message,
+                        final Header[] headers,
+                        final String content) {
         this.code = code;
-        this.message = message;
-        this.headers = new HashMap<>(headers);
-        this.content = content;
+        this.message = message == null ? "" : message;
+        this.headers = headers == null ? Collections.emptyList() : Arrays.asList(headers);
+        this.content = content == null ? "" : content;
     }
 
     public int getCode() {
@@ -47,11 +53,31 @@ public class HttpResponse {
         return message;
     }
 
-    public Map<String, List<String>> getHeaders() {
+    public List<Header> getHeaders() {
         return headers;
+    }
+
+    public String findHeader(String headerName) {
+        return getHeaders().stream()
+                .filter(header -> header.getName().equalsIgnoreCase(headerName))
+                // refer to https://www.w3.org/Protocols/rfc2616/rfc2616-sec4.html#sec4.2
+                // combine all values by comma
+                .map(Header::getValue)
+                .collect(Collectors.joining(","));
     }
 
     public String getContent() {
         return content;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("Response: status [%d], content [%s], headers [%s], body [%s]",
+                getCode(),
+                getContent(),
+                getHeaders().stream()
+                        .map(header -> header.getName() + ": " + String.valueOf(header.getValue()))
+                        .collect(Collectors.joining("; ")),
+                getMessage());
     }
 }

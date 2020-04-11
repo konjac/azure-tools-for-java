@@ -22,6 +22,11 @@
 
 package com.microsoft.azure.hdinsight.spark.ui
 
-class SparkSubmissionJobUploadStorageSparkInteractiveSessionCard: SparkSubmissionJobUploadStorageBasicCard() {
-    override val title: String = "Use Spark interactive session to upload artifacts"
+import com.microsoft.azure.hdinsight.spark.common.SparkSubmitStorageType.SPARK_INTERACTIVE_SESSION
+
+class SparkSubmissionJobUploadStorageSparkInteractiveSessionCard
+    : SparkSubmissionJobUploadStorageBasicCard(SPARK_INTERACTIVE_SESSION.description) {
+    override fun createViewModel(): ViewModel = object: ViewModel() {
+        override fun getValidatedStorageUploadPath(config: Model): String = "/SparkSubmission/"
+    }
 }

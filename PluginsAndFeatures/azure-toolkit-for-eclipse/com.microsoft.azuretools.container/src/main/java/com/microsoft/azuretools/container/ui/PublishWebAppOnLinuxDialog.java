@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
  *
  * All rights reserved.
@@ -22,9 +22,15 @@
 
 package com.microsoft.azuretools.container.ui;
 
+import static com.microsoft.azuretools.telemetry.TelemetryConstants.DEPLOY_WEBAPP_CONTAINER;
+import static com.microsoft.azuretools.telemetry.TelemetryConstants.WEBAPP;
+
+import com.microsoft.azuretools.telemetrywrapper.ErrorType;
+import com.microsoft.azuretools.telemetrywrapper.EventUtil;
+import com.microsoft.azuretools.telemetrywrapper.Operation;
+import com.microsoft.azuretools.telemetrywrapper.TelemetryManager;
 import java.io.File;
 import java.io.FileNotFoundException;
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -357,11 +363,7 @@ public class PublishWebAppOnLinuxDialog extends AzureTitleAreaDialogWrapper impl
     }
 
     private void validate() throws InvalidFormDataException {
-        try {
-            if (!AuthMethodManager.getInstance().isSignedIn()) {
-                throw new InvalidFormDataException(NEED_SIGN_IN);
-            }
-        } catch (IOException e) {
+        if (!AuthMethodManager.getInstance().isSignedIn()) {
             throw new InvalidFormDataException(NEED_SIGN_IN);
         }
         // docker file
@@ -456,8 +458,10 @@ public class PublishWebAppOnLinuxDialog extends AzureTitleAreaDialogWrapper impl
     }
 
     private void execute() {
+        Operation operation = TelemetryManager.createOperation(WEBAPP, DEPLOY_WEBAPP_CONTAINER);
         Observable.fromCallable(() -> {
             ConsoleLogger.info("Starting job ...  ");
+            operation.start();
             if (basePath == null) {
                 ConsoleLogger.error("Project base path is null.");
                 throw new FileNotFoundException("Project base path is null.");
@@ -521,10 +525,13 @@ public class PublishWebAppOnLinuxDialog extends AzureTitleAreaDialogWrapper impl
                     AzureUIRefreshCore.execute(new AzureUIRefreshEvent(AzureUIRefreshEvent.EventType.REFRESH, null));
                 }
                 sendTelemetry(true, null);
+                operation.complete();
             },
             err -> {
                 err.printStackTrace();
                 ConsoleLogger.error(err.getMessage());
+                EventUtil.logError(operation, ErrorType.systemError, new Exception(err), null, null);
+                operation.complete();
                 sendTelemetry(false, err.getMessage());
             });
     }

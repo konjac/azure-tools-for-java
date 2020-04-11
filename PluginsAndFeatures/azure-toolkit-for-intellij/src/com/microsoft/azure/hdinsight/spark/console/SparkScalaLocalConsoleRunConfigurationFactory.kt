@@ -25,8 +25,9 @@ package com.microsoft.azure.hdinsight.spark.console
 import com.intellij.execution.configurations.RunConfiguration
 import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.Project
-import com.microsoft.azure.hdinsight.spark.run.configuration.RemoteDebugRunConfiguration
-import org.jetbrains.plugins.scala.console.ScalaConsoleRunConfigurationFactory
+import com.microsoft.azure.hdinsight.spark.run.SparkLocalRun
+import com.microsoft.azure.hdinsight.spark.run.configuration.LivySparkBatchJobRunConfiguration
+import org.jetbrains.plugins.scala.console.configuration.ScalaConsoleRunConfigurationFactory
 
 class SparkScalaLocalConsoleRunConfigurationFactory(sparkConsoleType: SparkScalaLocalConsoleConfigurationType)
     : ScalaConsoleRunConfigurationFactory(sparkConsoleType) {
@@ -37,9 +38,15 @@ class SparkScalaLocalConsoleRunConfigurationFactory(sparkConsoleType: SparkScala
     override fun createConfiguration(name: String?, template: RunConfiguration): RunConfiguration {
         // Create a Spark Scala Console run configuration based on Spark Batch run configuration
         val configuration = createTemplateConfiguration(template.project) as SparkScalaLocalConsoleRunConfiguration
+        configuration.batchRunConfiguration = template as? LivySparkBatchJobRunConfiguration
+                ?: throw UnsupportedOperationException("Spark Local Console doesn't support starting from the configuration ${template.name}(type: ${template.type.displayName})")
+
         configuration.name = "${template.name} >> Spark Local Console(Scala)"
-        configuration.module = ModuleManager.getInstance(template.project).findModuleByName(template.project.name)
-        configuration.batchRunConfiguration = template as RemoteDebugRunConfiguration
+        val moduleManager = ModuleManager.getInstance(template.project)
+
+        val localClassModule = template.model.localRunConfigurableModel?.classpathModule
+        configuration.setModule(localClassModule?.let { moduleManager.findModuleByName(it) }
+                ?: SparkLocalRun.defaultModule(template.project))
 
         return configuration
     }

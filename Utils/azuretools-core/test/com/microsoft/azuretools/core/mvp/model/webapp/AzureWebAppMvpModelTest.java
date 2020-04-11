@@ -1,3 +1,25 @@
+/*
+ * Copyright (c) Microsoft Corporation
+ *
+ * All rights reserved.
+ *
+ * MIT License
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+ * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
+ * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
+ * the Software.
+ *
+ * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 package com.microsoft.azuretools.core.mvp.model.webapp;
 
 import com.microsoft.azure.Page;
@@ -89,8 +111,7 @@ public class AzureWebAppMvpModelTest {
 
     @After
     public void tearDown() {
-        azureWebAppMvpModel.cleanWebAppsOnWindows();
-        azureWebAppMvpModel.cleanWebAppsOnLinux();
+        azureWebAppMvpModel.clearWebAppsCache();
         reset(webAppsMock);
         reset(azureMock);
         reset(authMethodManagerMock);
@@ -397,9 +418,19 @@ public class AzureWebAppMvpModelTest {
 
     @Test
     public void testListWebContainers() {
-        // TODO: will contain all the container types from WebContainer?
-        List<WebAppUtils.WebContainerMod> containers = azureWebAppMvpModel.listWebContainers();
-        assertEquals(5, containers.size());
+        List<WebAppUtils.WebContainerMod> warContainers = AzureWebAppMvpModel.listWebContainersForWarFile();
+        assertEquals(6, warContainers.size());
+
+        List<WebAppUtils.WebContainerMod> jarContainers = AzureWebAppMvpModel.listWebContainersForJarFile(JdkModel.JAVA_8_NEWEST);
+        assertEquals(1, jarContainers.size());
+        assertEquals(jarContainers.get(0), WebAppUtils.WebContainerMod.Java_SE_8);
+
+        jarContainers = AzureWebAppMvpModel.listWebContainersForJarFile(JdkModel.JAVA_ZULU_11_0_2);
+        assertEquals(1, jarContainers.size());
+        assertEquals(jarContainers.get(0), WebAppUtils.WebContainerMod.Java_SE_11);
+
+        jarContainers = AzureWebAppMvpModel.listWebContainersForJarFile(JdkModel.JAVA_7_NEWEST);
+        assertEquals(0, jarContainers.size());
     }
 
     @Test

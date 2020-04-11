@@ -1,24 +1,25 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
- * <p/>
+ *
  * All rights reserved.
- * <p/>
+ *
  * MIT License
- * <p/>
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
  * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- * <p/>
+ *
  * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
  * the Software.
- * <p/>
+ *
  * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
 package com.microsoft.intellij.forms;
 
 import com.google.common.util.concurrent.*;
@@ -37,6 +38,10 @@ import com.microsoft.azuretools.azurecommons.rediscacheprocessors.ProcessingStra
 import com.microsoft.azuretools.azurecommons.rediscacheprocessors.ProcessorBase;
 import com.microsoft.azuretools.azurecommons.util.Utils;
 import com.microsoft.azuretools.sdkmanage.AzureManager;
+import com.microsoft.azuretools.telemetrywrapper.ErrorType;
+import com.microsoft.azuretools.telemetrywrapper.EventUtil;
+import com.microsoft.azuretools.telemetrywrapper.Operation;
+import com.microsoft.azuretools.telemetrywrapper.TelemetryManager;
 import com.microsoft.azuretools.utils.AzureModel;
 import com.microsoft.intellij.helpers.LinkListener;
 import com.microsoft.intellij.ui.components.AzureDialogWrapper;
@@ -62,6 +67,8 @@ import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 import static com.microsoft.azuretools.authmanage.AuthMethodManager.getInstance;
+import static com.microsoft.azuretools.telemetry.TelemetryConstants.CREATE_REDIS;
+import static com.microsoft.azuretools.telemetry.TelemetryConstants.REDIS;
 import static com.microsoft.intellij.ui.messages.AzureBundle.message;
 
 public class CreateRedisCacheForm extends AzureDialogWrapper {
@@ -180,9 +187,11 @@ public class CreateRedisCacheForm extends AzureDialogWrapper {
 
     class CreateRedisCallable implements Callable<Void> {
         private ProcessingStrategy processor;
+
         public CreateRedisCallable(ProcessingStrategy processor) {
             this.processor = processor;
         }
+
         public Void call() throws Exception {
             DefaultLoader.getIdeHelper().runInBackground(
                     null,
@@ -208,24 +217,30 @@ public class CreateRedisCacheForm extends AzureDialogWrapper {
     }
 
     private void onOK() {
+        final Operation operation = TelemetryManager.createOperation(REDIS, CREATE_REDIS);
         try {
+            operation.start();
             Azure azure = azureManager.getAzure(currentSub.getSubscriptionId());
             setSubscription(currentSub);
             ProcessingStrategy processor = RedisCacheUtil.doGetProcessor(azure, skus, redisCacheNameValue, selectedLocationValue, selectedResGrpValue, selectedPriceTierValue, noSSLPort, newResGrp);
             ExecutorService executor = Executors.newSingleThreadExecutor();
             ListeningExecutorService executorService = MoreExecutors.listeningDecorator(executor);
-            ListenableFuture<Void> futureTask =  executorService.submit(new CreateRedisCallable(processor));
+            ListenableFuture<Void> futureTask = executorService.submit(new CreateRedisCallable(processor));
             final ProcessingStrategy processorInner = processor;
             Futures.addCallback(futureTask, new FutureCallback<Void>() {
                 @Override
                 public void onSuccess(Void arg0) {
                     if (onCreate != null) {
                         onCreate.run();
+                        operation.complete();
                     }
                 }
+
                 @Override
                 public void onFailure(Throwable throwable) {
                     JOptionPane.showMessageDialog(null, throwable.getMessage(), "Error occurred when creating Redis Cache: " + redisCacheNameValue, JOptionPane.ERROR_MESSAGE, null);
+                    EventUtil.logError(operation, ErrorType.userError, new Exception(throwable), null, null);
+                    operation.complete();
                     try {
                         // notify the waitting thread the thread being waited incurred exception to clear blocking queue
                         processorInner.notifyCompletion();
@@ -234,10 +249,12 @@ public class CreateRedisCacheForm extends AzureDialogWrapper {
                         PluginUtil.displayErrorDialogAndLog(message("errTtl"), msg, ex);
                     }
                 }
-            });
+            }, MoreExecutors.directExecutor());
             close(DialogWrapper.OK_EXIT_CODE, true);
         } catch (Exception ex) {
             ex.printStackTrace();
+            EventUtil.logError(operation, ErrorType.userError, ex, null, null);
+            operation.complete();
         }
     }
 
@@ -338,7 +355,6 @@ public class CreateRedisCacheForm extends AzureDialogWrapper {
             }
         });
 
-
         cbLocations.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
@@ -347,7 +363,6 @@ public class CreateRedisCacheForm extends AzureDialogWrapper {
         });
 
         lblPricing.addMouseListener(new LinkListener(PRICING_LINK));
-
 
         cbPricing.addActionListener(new ActionListener() {
             @Override

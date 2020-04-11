@@ -25,20 +25,12 @@ package com.microsoft.intellij.helpers.webapp;
 import org.jetbrains.annotations.NotNull;
 
 import com.intellij.openapi.fileEditor.FileEditor;
-import com.intellij.openapi.fileEditor.FileEditorPolicy;
-import com.intellij.openapi.fileEditor.FileEditorProvider;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.microsoft.intellij.helpers.UIHelperImpl;
 
-public class WebAppPropertyViewProvider implements FileEditorProvider {
-
-    private static final String TYPE = "WEB_APP_PROPERTY";
-
-    @Override
-    public boolean accept(@NotNull Project project, @NotNull VirtualFile virtualFile) {
-        return virtualFile.getFileType().getName().equals(TYPE);
-    }
+public class WebAppPropertyViewProvider extends WebAppBasePropertyViewProvider {
+    public static final String TYPE = "WEB_APP_PROPERTY";
 
     @NotNull
     @Override
@@ -48,19 +40,8 @@ public class WebAppPropertyViewProvider implements FileEditorProvider {
         return WebAppPropertyView.create(project, sid, id);
     }
 
-    @NotNull
     @Override
-    public String getEditorTypeId() {
-        return TYPE;
-    }
-
-    @NotNull
-    @Override
-    public FileEditorPolicy getPolicy() {
-        return FileEditorPolicy.HIDE_DEFAULT_EDITOR;
-    }
-
-    public static String getType() {
+    protected String getType() {
         return TYPE;
     }
 }

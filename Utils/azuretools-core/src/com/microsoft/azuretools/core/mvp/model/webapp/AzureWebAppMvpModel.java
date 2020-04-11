@@ -18,35 +18,20 @@
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
- *
  */
 
 package com.microsoft.azuretools.core.mvp.model.webapp;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
-
-import org.apache.commons.io.IOUtils;
-
 import com.microsoft.azure.management.Azure;
 import com.microsoft.azure.management.appservice.AppServicePlan;
+import com.microsoft.azure.management.appservice.CsmPublishingProfileOptions;
 import com.microsoft.azure.management.appservice.DeploymentSlot;
 import com.microsoft.azure.management.appservice.OperatingSystem;
 import com.microsoft.azure.management.appservice.PricingTier;
 import com.microsoft.azure.management.appservice.PublishingProfileFormat;
 import com.microsoft.azure.management.appservice.RuntimeStack;
 import com.microsoft.azure.management.appservice.WebApp;
+import com.microsoft.azure.management.appservice.WebAppBase;
 import com.microsoft.azure.management.appservice.WebContainer;
 import com.microsoft.azure.management.resources.Subscription;
 import com.microsoft.azure.management.resources.fluentcore.arm.Region;
@@ -55,11 +40,32 @@ import com.microsoft.azuretools.azurecommons.helpers.NotNull;
 import com.microsoft.azuretools.core.mvp.model.AzureMvpModel;
 import com.microsoft.azuretools.core.mvp.model.ResourceEx;
 import com.microsoft.azuretools.utils.WebAppUtils;
+import org.apache.commons.io.IOUtils;
+import rx.Observable;
+import rx.schedulers.Schedulers;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 public class AzureWebAppMvpModel {
 
     public static final String CANNOT_GET_WEB_APP_WITH_ID = "Cannot get Web App with ID: ";
     private final Map<String, List<ResourceEx<WebApp>>> subscriptionIdToWebApps;
+
+    private static final List<WebAppUtils.WebContainerMod> JAVA_8_JAR_CONTAINERS = Collections.singletonList(WebAppUtils.WebContainerMod.Java_SE_8);
+    private static final List<WebAppUtils.WebContainerMod> JAVA_11_JAR_CONTAINERS = Collections.singletonList(WebAppUtils.WebContainerMod.Java_SE_11);
 
     private AzureWebAppMvpModel() {
         subscriptionIdToWebApps = new ConcurrentHashMap<>();
@@ -252,9 +258,9 @@ public class AzureWebAppMvpModel {
         // TODO
     }
 
-    public void deleteWebApp(String sid, String appid) throws IOException {
-        AuthMethodManager.getInstance().getAzureClient(sid).webApps().deleteById(appid);
-        // TODO: update cache
+    public void deleteWebApp(String sid, String appId) throws IOException {
+        AuthMethodManager.getInstance().getAzureClient(sid).webApps().deleteById(appId);
+        subscriptionIdToWebApps.remove(sid);
     }
 
     /**
@@ -377,6 +383,22 @@ public class AzureWebAppMvpModel {
         update.apply();
     }
 
+    /**
+     * Update app settings of deployment slot.
+     */
+    public void updateDeploymentSlotAppSettings(final String subsciptionId, final String webAppId,
+                                                final String slotName, final Map<String, String> toUpdate,
+                                                final Set<String> toRemove) throws Exception {
+        final DeploymentSlot slot = getWebAppById(subsciptionId, webAppId).deploymentSlots().getByName(slotName);
+        clearTags(slot);
+        com.microsoft.azure.management.appservice.WebAppBase.Update<DeploymentSlot> update = slot.update()
+            .withAppSettings(toUpdate);
+        for (String key : toRemove) {
+            update = update.withoutAppSetting(key);
+        }
+        update.apply();
+    }
+
     public void deleteWebAppOnLinux(String sid, String appid) throws IOException {
         deleteWebApp(sid, appid);
     }
@@ -416,6 +438,12 @@ public class AzureWebAppMvpModel {
         final WebApp app = AuthMethodManager.getInstance().getAzureClient(subscriptionId).webApps().getById(appId);
         final DeploymentSlot slot = app.deploymentSlots().getByName(slotName);
         slot.swap("production");
+    }
+
+    public void deleteDeploymentSlotNode(final String subscriptionId, final String appId,
+                                         final String slotName) throws IOException {
+        final WebApp app = AuthMethodManager.getInstance().getAzureClient(subscriptionId).webApps().getById(appId);
+        app.deploymentSlots().deleteByName(slotName);
     }
 
     /**
@@ -490,10 +518,18 @@ public class AzureWebAppMvpModel {
      */
     public List<ResourceEx<WebApp>> listAllWebApps(final boolean force) {
         final List<ResourceEx<WebApp>> webApps = new ArrayList<>();
-        for (final Subscription sub : AzureMvpModel.getInstance().getSelectedSubscriptions()) {
-            final String sid = sub.subscriptionId();
-            webApps.addAll(listWebApps(sid, force));
+        List<Subscription> subs = AzureMvpModel.getInstance().getSelectedSubscriptions();
+        if (subs.size() == 0) {
+            return webApps;
         }
+        Observable.from(subs).flatMap((sd) ->
+            Observable.create((subscriber) -> {
+                List<ResourceEx<WebApp>> webAppList = listWebApps(sd.subscriptionId(), force);
+                synchronized (webApps) {
+                    webApps.addAll(webAppList);
+                }
+                subscriber.onCompleted();
+            }).subscribeOn(Schedulers.io()), subs.size()).subscribeOn(Schedulers.io()).toBlocking().subscribe();
         return webApps;
     }
 
@@ -541,8 +577,35 @@ public class AzureWebAppMvpModel {
     }
 
     /**
-     * List available Web Containers.
+     * List available web containers for jar files.
      */
+    public static List<WebAppUtils.WebContainerMod> listWebContainersForJarFile(JdkModel jdkModel) {
+        if (jdkModel == null || jdkModel.getJavaVersion() == null) {
+            return Collections.emptyList();
+        }
+        final String javaVersion = jdkModel.getJavaVersion().toString();
+        if (javaVersion.startsWith("1.8")) {
+            return JAVA_8_JAR_CONTAINERS;
+        } else if (javaVersion.startsWith("11")) {
+            return JAVA_11_JAR_CONTAINERS;
+        }
+        return Collections.emptyList();
+    }
+
+    /**
+     * List available web containers for war files.
+     */
+    public static List<WebAppUtils.WebContainerMod> listWebContainersForWarFile() {
+        return Arrays.asList(
+                WebAppUtils.WebContainerMod.Newest_Jetty_91,
+                WebAppUtils.WebContainerMod.Newest_Jetty_93,
+                WebAppUtils.WebContainerMod.Newest_Tomcat_70,
+                WebAppUtils.WebContainerMod.Newest_Tomcat_80,
+                WebAppUtils.WebContainerMod.Newest_Tomcat_85,
+                WebAppUtils.WebContainerMod.Newest_Tomcat_90
+        );
+    }
+
     public List<WebAppUtils.WebContainerMod> listWebContainers() {
         List<WebAppUtils.WebContainerMod> webContainers = new ArrayList<>();
         Collections.addAll(webContainers, WebAppUtils.WebContainerMod.values());
@@ -564,11 +627,7 @@ public class AzureWebAppMvpModel {
      * linux runtimes, do we really need to get the values from Mvp model every time?
      */
     public List<RuntimeStack> getLinuxRuntimes() {
-        final List<RuntimeStack> runtimes = new ArrayList<>();
-        runtimes.add(RuntimeStack.TOMCAT_8_5_JRE8);
-        runtimes.add(RuntimeStack.TOMCAT_9_0_JRE8);
-        runtimes.add(RuntimeStack.JAVA_8_JRE8);
-        return runtimes;
+        return WebAppUtils.getAllJavaLinuxRuntimeStacks();
     }
 
     /**
@@ -586,7 +645,7 @@ public class AzureWebAppMvpModel {
     }
 
     /**
-     * Download publish profile.
+     * Download publish profile of web app.
      *
      * @param sid      subscription id
      * @param webAppId webapp id
@@ -596,12 +655,22 @@ public class AzureWebAppMvpModel {
      */
     public boolean getPublishingProfileXmlWithSecrets(String sid, String webAppId, String filePath) throws Exception {
         WebApp app = getWebAppById(sid, webAppId);
-        File file = new File(Paths.get(filePath, app.name() + "_" + System.currentTimeMillis() + ".PublishSettings")
-                .toString());
+        return AppServiceUtils.getPublishingProfileXmlWithSecrets(app, filePath);
+    }
+
+    /**
+     * Download publish profile of deployment slot.
+     */
+    public boolean getSlotPublishingProfileXmlWithSecrets(final String sid, final String webAppId, final String slotName,
+                                                          final String filePath) throws Exception {
+        final WebApp app = getWebAppById(sid, webAppId);
+        final DeploymentSlot slot = app.deploymentSlots().getByName(slotName);
+        final File file = new File(Paths.get(filePath, slotName + "_" + System.currentTimeMillis() + ".PublishSettings")
+            .toString());
         file.createNewFile();
-        try (InputStream inputStream = app.manager().inner().webApps()
-                .listPublishingProfileXmlWithSecrets(app.resourceGroupName(), app.name(),
-                        PublishingProfileFormat.FTP);
+        try (final InputStream inputStream = slot.manager().inner().webApps()
+            .listPublishingProfileXmlWithSecretsSlot(slot.resourceGroupName(), app.name(), slotName,
+                    new CsmPublishingProfileOptions().withFormat(PublishingProfileFormat.FTP));
              OutputStream outputStream = new FileOutputStream(file);
         ) {
             IOUtils.copy(inputStream, outputStream);
@@ -612,18 +681,7 @@ public class AzureWebAppMvpModel {
         }
     }
 
-    @Deprecated
-    public void cleanWebAppsOnWindows() {
-        // todo: remove the function
-        // todo: create a new function clearWebAppsCache clear cache web apps
-        // subscriptionIdToWebAppsOnWindowsMap.clear();
-        subscriptionIdToWebApps.clear();
-    }
-
-    @Deprecated
-    public void cleanWebAppsOnLinux() {
-        // todo: remove the function
-        // subscriptionIdToWebAppsOnLinuxMap.clear();
+    public void clearWebAppsCache() {
         subscriptionIdToWebApps.clear();
     }
 
@@ -631,10 +689,10 @@ public class AzureWebAppMvpModel {
      * Work Around:
      * When a web app is created from Azure Portal, there are hidden tags associated with the app.
      * It will be messed up when calling "update" API.
-     * An issue is logged at https://github.com/Azure/azure-sdk-for-java/issues/1755 .
+     * An issue is logged at https://github.com/Azure/azure-libraries-for-java/issues/508 .
      * Remove all tags here to make it work.
      */
-    private void clearTags(@NotNull final WebApp app) {
+    private void clearTags(@NotNull final WebAppBase app) {
         app.inner().withTags(null);
     }
 

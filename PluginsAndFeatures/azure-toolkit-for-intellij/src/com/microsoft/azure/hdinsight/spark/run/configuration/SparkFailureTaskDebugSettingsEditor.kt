@@ -25,22 +25,25 @@ package com.microsoft.azure.hdinsight.spark.run.configuration
 import com.intellij.openapi.options.SettingsEditor
 import com.intellij.openapi.project.Project
 import com.microsoft.azure.hdinsight.spark.ui.SparkFailureTaskDebugConfigurable
+import com.microsoft.azuretools.telemetry.TelemetryConstants
+import com.microsoft.intellij.telemetry.addTelemetryListener
 import javax.swing.JComponent
 
 class SparkFailureTaskDebugSettingsEditor(project: Project) : SettingsEditor<SparkFailureTaskDebugConfiguration>() {
     private val configurable = SparkFailureTaskDebugConfigurable(project)
 
     override fun createEditor(): JComponent {
+        configurable.component.addTelemetryListener(TelemetryConstants.SPARK_FAILURE_TASK_DEBUG)
         return configurable.component
     }
 
     override fun resetEditorFrom(data: SparkFailureTaskDebugConfiguration) {
         // Reset the panel from the RunConfiguration
-        configurable.setData(data.module.settings)
+        configurable.setData(data.model.settings)
     }
 
     override fun applyEditorTo(data: SparkFailureTaskDebugConfiguration) {
         // Apply the panel's setting to RunConfiguration
-        configurable.getData(data.module.settings)
+        configurable.getData(data.model.settings)
     }
 }

@@ -1,18 +1,18 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
- * <p/>
+ *
  * All rights reserved.
- * <p/>
+ *
  * MIT License
- * <p/>
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
  * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- * <p/>
+ *
  * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
  * the Software.
- * <p/>
+ *
  * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
@@ -22,58 +22,91 @@
 
 package com.microsoft.intellij.helpers;
 
+import static com.microsoft.intellij.helpers.arm.DeploymentPropertyViewProvider.TYPE;
+
 import com.google.common.collect.ImmutableMap;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.fileChooser.*;
+import com.intellij.openapi.fileChooser.FileChooserFactory;
+import com.intellij.openapi.fileChooser.FileSaverDescriptor;
+import com.intellij.openapi.fileChooser.FileSaverDialog;
 import com.intellij.openapi.fileEditor.FileEditor;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.ui.MessageType;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileWrapper;
+import com.intellij.openapi.wm.StatusBar;
+import com.intellij.openapi.wm.WindowManager;
 import com.intellij.testFramework.LightVirtualFile;
 import com.intellij.util.ui.UIUtil;
+import com.microsoft.azure.management.appplatform.v2019_05_01_preview.implementation.AppResourceInner;
 import com.microsoft.azure.management.storage.StorageAccount;
 import com.microsoft.azuretools.azurecommons.helpers.AzureCmdException;
 import com.microsoft.azuretools.azurecommons.helpers.NotNull;
 import com.microsoft.azuretools.azurecommons.helpers.Nullable;
 import com.microsoft.azuretools.azurecommons.util.Utils;
+import com.microsoft.azuretools.telemetry.TelemetryConstants;
+import com.microsoft.azuretools.telemetrywrapper.EventUtil;
 import com.microsoft.intellij.AzurePlugin;
 import com.microsoft.intellij.forms.ErrorMessageForm;
 import com.microsoft.intellij.forms.OpenSSLFinderForm;
+import com.microsoft.intellij.helpers.arm.DeploymentPropertyView;
+import com.microsoft.intellij.helpers.arm.ResourceTemplateView;
+import com.microsoft.intellij.helpers.arm.ResourceTemplateViewProvider;
 import com.microsoft.intellij.helpers.containerregistry.ContainerRegistryPropertyView;
 import com.microsoft.intellij.helpers.containerregistry.ContainerRegistryPropertyViewProvider;
+import com.microsoft.intellij.helpers.function.FunctionAppPropertyViewProvider;
 import com.microsoft.intellij.helpers.rediscache.RedisCacheExplorerProvider;
 import com.microsoft.intellij.helpers.rediscache.RedisCachePropertyView;
 import com.microsoft.intellij.helpers.rediscache.RedisCachePropertyViewProvider;
 import com.microsoft.intellij.helpers.storage.*;
+import com.microsoft.intellij.helpers.webapp.DeploymentSlotPropertyViewProvider;
 import com.microsoft.intellij.helpers.webapp.WebAppPropertyViewProvider;
+import com.microsoft.intellij.ui.util.UIUtils;
 import com.microsoft.tooling.msservices.components.DefaultLoader;
 import com.microsoft.tooling.msservices.helpers.UIHelper;
+import com.microsoft.tooling.msservices.model.storage.Queue;
 import com.microsoft.tooling.msservices.model.storage.*;
+import com.microsoft.tooling.msservices.serviceexplorer.Node;
+import com.microsoft.tooling.msservices.serviceexplorer.azure.arm.deployments.DeploymentNode;
 import com.microsoft.tooling.msservices.serviceexplorer.azure.container.ContainerRegistryNode;
+import com.microsoft.tooling.msservices.serviceexplorer.azure.function.FunctionNode;
 import com.microsoft.tooling.msservices.serviceexplorer.azure.rediscache.RedisCacheNode;
+import com.microsoft.tooling.msservices.serviceexplorer.azure.springcloud.SpringCloudAppNode;
 import com.microsoft.tooling.msservices.serviceexplorer.azure.webapp.WebAppNode;
+import com.microsoft.tooling.msservices.serviceexplorer.azure.webapp.deploymentslot.DeploymentSlotNode;
 
 import javax.swing.*;
-import java.awt.Desktop;
+import java.awt.*;
 import java.io.File;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.URI;
 import java.text.DecimalFormat;
+import java.util.HashMap;
 import java.util.Map;
+
+import static com.microsoft.azuretools.core.mvp.model.springcloud.SpringCloudIdHelper.getSubscriptionId;
+import static com.microsoft.intellij.helpers.springcloud.SpringCloudAppPropertyViewProvider.SPRING_CLOUD_APP_PROPERTY_TYPE;
+
 
 public class UIHelperImpl implements UIHelper {
     public static Key<StorageAccount> STORAGE_KEY = new Key<StorageAccount>("storageAccount");
     public static Key<ClientStorageAccount> CLIENT_STORAGE_KEY = new Key<ClientStorageAccount>("clientStorageAccount");
     public static final Key<String> SUBSCRIPTION_ID = new Key<>("subscriptionId");
     public static final Key<String> RESOURCE_ID = new Key<>("resourceId");
-    private Map<Class<? extends StorageServiceTreeItem>, Key<? extends StorageServiceTreeItem>> name2Key = ImmutableMap.of(BlobContainer.class, BlobExplorerFileEditorProvider.CONTAINER_KEY,
-            Queue.class, QueueExplorerFileEditorProvider.QUEUE_KEY,
-            Table.class, TableExplorerFileEditorProvider.TABLE_KEY);
+    public static final Key<String> WEBAPP_ID = new Key<>("webAppId");
+    public static final Key<String> APP_ID = new Key<>("appId");
+    public static final Key<AppResourceInner> SPRING_CLOUD_APP = new Key<>("springCloudApp");
+
+    public static final Key<String> SLOT_NAME = new Key<>("slotName");
+    private Map<Class<? extends StorageServiceTreeItem>, Key<? extends StorageServiceTreeItem>> name2Key =
+            ImmutableMap.of(BlobContainer.class, BlobExplorerFileEditorProvider.CONTAINER_KEY,
+                Queue.class, QueueExplorerFileEditorProvider.QUEUE_KEY,
+                Table.class, TableExplorerFileEditorProvider.TABLE_KEY);
 
     private static final String UNABLE_TO_OPEN_BROWSER = "Unable to open external web browser";
     private static final String UNABLE_TO_OPEN_EDITOR_WINDOW = "Unable to open new editor window";
@@ -123,6 +156,34 @@ public class UIHelperImpl implements UIHelper {
     }
 
     @Override
+    public boolean showConfirmation(@NotNull Component node, @NotNull String message, @NotNull String title, @NotNull String[] options, String defaultOption) {
+        int optionDialog = JOptionPane.showOptionDialog(node,
+                message,
+                title,
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                options,
+                defaultOption);
+        return (optionDialog == JOptionPane.YES_OPTION);
+    }
+
+    @Override
+    public void showInfo(Node node, String s) {
+        showNotification(node, s, MessageType.INFO);
+    }
+
+    @Override
+    public void showError(Node node, String s) {
+        showNotification(node, s, MessageType.ERROR);
+    }
+
+    private void showNotification(Node node, String s, MessageType type) {
+        StatusBar statusBar = WindowManager.getInstance().getStatusBar((Project) node.getProject());
+        UIUtils.showNotification(statusBar, s, type);
+    }
+
+    @Override
     public void logError(String message, Throwable ex) {
         AzurePlugin.log(message, ex);
     }
@@ -133,9 +194,14 @@ public class UIHelperImpl implements UIHelper {
      */
     @Override
     public File showFileChooser(String title) {
+        return showFileSaver(title, "");
+    }
+
+    @Override
+    public File showFileSaver(String title, String fileName) {
         FileSaverDescriptor fileDescriptor = new FileSaverDescriptor(title, "");
         final FileSaverDialog dialog = FileChooserFactory.getInstance().createSaveFileDialog(fileDescriptor, (Project) null);
-        final VirtualFileWrapper save = dialog.save(LocalFileSystem.getInstance().findFileByPath(System.getProperty("user.home")), "");
+        final VirtualFileWrapper save = dialog.save(LocalFileSystem.getInstance().findFileByPath(System.getProperty("user.home")), fileName);
 
         if (save != null) {
             return save.getFile();
@@ -160,7 +226,11 @@ public class UIHelperImpl implements UIHelper {
     }
 
     @Override
-    public <T extends StorageServiceTreeItem> void openItem(Object projectObject, ClientStorageAccount clientStorageAccount, T item, String itemType, String itemName, String iconName) {
+    public <T extends StorageServiceTreeItem> void openItem(Object projectObject,
+                                                            ClientStorageAccount clientStorageAccount,
+                                                            T item, String itemType,
+                                                            String itemName,
+                                                            String iconName) {
         LightVirtualFile itemVirtualFile = new LightVirtualFile(item.getName() + itemType);
         itemVirtualFile.putUserData((Key<T>) name2Key.get(item.getClass()), item);
         itemVirtualFile.putUserData(CLIENT_STORAGE_KEY, clientStorageAccount);
@@ -244,7 +314,6 @@ public class UIHelperImpl implements UIHelper {
         });
     }
 
-
     @Override
     public void refreshBlobs(@NotNull final Object projectObject, @NotNull final String accountName, @NotNull final BlobContainer container) {
         ApplicationManager.getApplication().runReadAction(new Runnable() {
@@ -252,7 +321,9 @@ public class UIHelperImpl implements UIHelper {
             public void run() {
                 VirtualFile file = (VirtualFile) getOpenedFile(projectObject, accountName, container);
                 if (file != null) {
-                    final BlobExplorerFileEditor containerFileEditor = (BlobExplorerFileEditor) FileEditorManager.getInstance((Project) projectObject).getEditors(file)[0];
+                    final BlobExplorerFileEditor containerFileEditor =
+                            (BlobExplorerFileEditor) FileEditorManager.getInstance((Project) projectObject)
+                                    .getEditors(file)[0];
                     ApplicationManager.getApplication().invokeLater(new Runnable() {
                         @Override
                         public void run() {
@@ -296,30 +367,33 @@ public class UIHelperImpl implements UIHelper {
 
     @Override
     public void openRedisPropertyView(@NotNull RedisCacheNode node) {
-        String redisName = node.getName() != null ? node.getName() : RedisCacheNode.TYPE;
-        String sid = node.getSubscriptionId();
-        String resId = node.getResourceId();
-        if (isSubscriptionIdAndResourceIdEmpty(sid, resId)) {
-            return;
-        }
-        Project project = (Project) node.getProject();
-        FileEditorManager fileEditorManager = FileEditorManager.getInstance(project);
-        if (fileEditorManager == null) {
-            showError(CANNOT_GET_FILE_EDITOR_MANAGER, UNABLE_TO_OPEN_EDITOR_WINDOW);
-            return;
-        }
-        LightVirtualFile itemVirtualFile = searchExistingFile(fileEditorManager, RedisCachePropertyViewProvider.TYPE, resId);
-        if (itemVirtualFile == null) {
-            itemVirtualFile = createVirtualFile(redisName, RedisCachePropertyViewProvider.TYPE,
-                    RedisCacheNode.REDISCACHE_ICON_PATH, sid, resId);
-        }
-        FileEditor[] editors = fileEditorManager.openFile(itemVirtualFile, true, true);
-        for (FileEditor editor: editors) {
-            if (editor.getName().equals(RedisCachePropertyView.ID) &&
-                    editor instanceof RedisCachePropertyView) {
-                ((RedisCachePropertyView) editor).onReadProperty(sid, resId);
+        EventUtil.executeWithLog(TelemetryConstants.REDIS, TelemetryConstants.REDIS_READPROP, (operation) -> {
+            String redisName = node.getName() != null ? node.getName() : RedisCacheNode.TYPE;
+            String sid = node.getSubscriptionId();
+            String resId = node.getResourceId();
+            if (isSubscriptionIdAndResourceIdEmpty(sid, resId)) {
+                return;
             }
-        }
+            Project project = (Project) node.getProject();
+            FileEditorManager fileEditorManager = FileEditorManager.getInstance(project);
+            if (fileEditorManager == null) {
+                showError(CANNOT_GET_FILE_EDITOR_MANAGER, UNABLE_TO_OPEN_EDITOR_WINDOW);
+                return;
+            }
+            LightVirtualFile itemVirtualFile = searchExistingFile(fileEditorManager,
+                RedisCachePropertyViewProvider.TYPE, resId);
+            if (itemVirtualFile == null) {
+                itemVirtualFile = createVirtualFile(redisName, RedisCachePropertyViewProvider.TYPE,
+                    RedisCacheNode.REDISCACHE_ICON_PATH, sid, resId);
+            }
+            FileEditor[] editors = fileEditorManager.openFile(itemVirtualFile, true, true);
+            for (FileEditor editor : editors) {
+                if (editor.getName().equals(RedisCachePropertyView.ID) &&
+                    editor instanceof RedisCachePropertyView) {
+                    ((RedisCachePropertyView) editor).onReadProperty(sid, resId);
+                }
+            }
+        });
     }
 
     @Override
@@ -341,7 +415,70 @@ public class UIHelperImpl implements UIHelper {
             itemVirtualFile = createVirtualFile(redisName, RedisCacheExplorerProvider.TYPE,
                     RedisCacheNode.REDISCACHE_ICON_PATH, sid, resId);
         }
-        fileEditorManager.openFile( itemVirtualFile, true, true);
+        fileEditorManager.openFile(itemVirtualFile, true, true);
+    }
+
+    @Override
+    public void openDeploymentPropertyView(DeploymentNode node) {
+        Project project = (Project) node.getProject();
+        FileEditorManager fileEditorManager = FileEditorManager.getInstance(project);
+        if (fileEditorManager == null) {
+            showError(CANNOT_GET_FILE_EDITOR_MANAGER, UNABLE_TO_OPEN_EDITOR_WINDOW);
+            return;
+        }
+        LightVirtualFile itemVirtualFile = searchExistingFile(fileEditorManager, TYPE, node.getId());
+        if (itemVirtualFile == null) {
+            itemVirtualFile = createVirtualFile(node.getName(), TYPE,
+                DeploymentNode.ICON_PATH, node.getSubscriptionId(), node.getId());
+        }
+        FileEditor[] fileEditors = fileEditorManager.openFile(itemVirtualFile, true, true);
+        for (FileEditor fileEditor : fileEditors) {
+            if (fileEditor.getName().equals(DeploymentPropertyView.ID) && fileEditor instanceof DeploymentPropertyView) {
+                ((DeploymentPropertyView) fileEditor).onLoadProperty(node);
+            }
+        }
+    }
+
+    @Override
+    public void openSpringCloudAppPropertyView(SpringCloudAppNode node) {
+        Project project = (Project) node.getProject();
+        final FileEditorManager fileEditorManager = FileEditorManager.getInstance(project);
+        if (fileEditorManager == null) {
+            showError(CANNOT_GET_FILE_EDITOR_MANAGER, UNABLE_TO_OPEN_EDITOR_WINDOW);
+            return;
+        }
+        final String id = node.getAppId();
+        final String subscription = getSubscriptionId(id);
+        final String appName = node.getAppName();
+        LightVirtualFile itemVirtualFile = searchExistingFile(fileEditorManager, SPRING_CLOUD_APP_PROPERTY_TYPE, id);
+        if (itemVirtualFile == null) {
+            itemVirtualFile = createVirtualFile(appName, SPRING_CLOUD_APP_PROPERTY_TYPE,
+                    DeploymentNode.ICON_PATH, subscription, id);
+        }
+        itemVirtualFile.putUserData(APP_ID, id);
+        fileEditorManager.openFile(itemVirtualFile, true, true);
+    }
+
+    @Override
+    public void openResourceTemplateView(DeploymentNode node, String template) {
+        Project project = (Project) node.getProject();
+        FileEditorManager fileEditorManager = FileEditorManager.getInstance(project);
+        if (fileEditorManager == null) {
+            showError(CANNOT_GET_FILE_EDITOR_MANAGER, UNABLE_TO_OPEN_EDITOR_WINDOW);
+            return;
+        }
+        LightVirtualFile itemVirtualFile = searchExistingFile(fileEditorManager, ResourceTemplateViewProvider.TYPE,
+            node.getId());
+        if (itemVirtualFile == null) {
+            itemVirtualFile = createVirtualFile(node.getName(), ResourceTemplateViewProvider.TYPE,
+                DeploymentNode.ICON_PATH, node.getSubscriptionId(), node.getId());
+        }
+        FileEditor[] fileEditors = fileEditorManager.openFile(itemVirtualFile, true, true);
+        for (FileEditor fileEditor : fileEditors) {
+            if (fileEditor.getName().equals(ResourceTemplateView.ID) && fileEditor instanceof ResourceTemplateView) {
+                ((ResourceTemplateView) fileEditor).loadTemplate(node, template);
+            }
+        }
     }
 
     @Override
@@ -373,7 +510,7 @@ public class UIHelperImpl implements UIHelper {
             itemVirtualFile = createVirtualFile(registryName, ContainerRegistryPropertyViewProvider.TYPE,
                     ContainerRegistryNode.ICON_PATH, sid, resId);
         }
-        FileEditor[] editors = fileEditorManager.openFile( itemVirtualFile, true /*focusEditor*/, true /*searchForOpen*/);
+        FileEditor[] editors = fileEditorManager.openFile(itemVirtualFile, true /*focusEditor*/, true /*searchForOpen*/);
         for (FileEditor editor: editors) {
             if (editor.getName().equals(ContainerRegistryPropertyView.ID) &&
                     editor instanceof ContainerRegistryPropertyView) {
@@ -382,26 +519,76 @@ public class UIHelperImpl implements UIHelper {
         }
     }
 
-    @Override
-    public void openWebAppPropertyView(@NotNull WebAppNode webAppNode) {
-        String webAppName = webAppNode.getName();
-        String sid = webAppNode.getSubscriptionId();
-        String resId = webAppNode.getWebAppId();
-        if (isSubscriptionIdAndResourceIdEmpty(sid, resId)) {
-            return;
+    protected FileEditorManager getFileEditorManager(@NotNull final String sid, @NotNull final String webAppId,
+                                                     @NotNull final Project project) {
+        if (isSubscriptionIdAndResourceIdEmpty(sid, webAppId)) {
+            return null;
         }
-        Project project = (Project) webAppNode.getProject();
-        FileEditorManager fileEditorManager = FileEditorManager.getInstance(project);
+        final FileEditorManager fileEditorManager = FileEditorManager.getInstance(project);
         if (fileEditorManager == null) {
             showError(CANNOT_GET_FILE_EDITOR_MANAGER, UNABLE_TO_OPEN_EDITOR_WINDOW);
+            return null;
+        }
+        return fileEditorManager;
+    }
+
+    @Override
+    public void openWebAppPropertyView(@NotNull final WebAppNode node) {
+        final String sid = node.getSubscriptionId();
+        final String webAppId = node.getWebAppId();
+        final FileEditorManager fileEditorManager = getFileEditorManager(sid, webAppId, (Project) node.getProject());
+        if (fileEditorManager == null) {
             return;
         }
-        LightVirtualFile itemVirtualFile = searchExistingFile(fileEditorManager,
-                WebAppPropertyViewProvider.getType(), resId);
+        final String type = WebAppPropertyViewProvider.TYPE;
+        LightVirtualFile itemVirtualFile = searchExistingFile(fileEditorManager, type, webAppId);
         if (itemVirtualFile == null) {
-            String iconPath = webAppNode.getParent() == null ? webAppNode.getIconPath()
-                    : webAppNode.getParent().getIconPath();
-            itemVirtualFile = createVirtualFile(webAppName, WebAppPropertyViewProvider.getType(), iconPath, sid, resId);
+            final String iconPath = node.getParent() == null ? node.getIconPath()
+                : node.getParent().getIconPath();
+            itemVirtualFile = createVirtualFile(node.getWebAppName(), type, iconPath, sid, webAppId);
+        }
+        fileEditorManager.openFile(itemVirtualFile, true /*focusEditor*/, true /*searchForOpen*/);
+    }
+
+    @Override
+    public void openDeploymentSlotPropertyView(@NotNull DeploymentSlotNode node) {
+        final String sid = node.getSubscriptionId();
+        final String resourceId = node.getId();
+        final FileEditorManager fileEditorManager = getFileEditorManager(sid, resourceId, (Project) node.getProject());
+        if (fileEditorManager == null) {
+            return;
+        }
+        final String type = DeploymentSlotPropertyViewProvider.TYPE;
+
+        LightVirtualFile itemVirtualFile = searchExistingFile(fileEditorManager, type, resourceId);
+        if (itemVirtualFile == null) {
+            final String iconPath = node.getParent() == null ? node.getIconPath()
+                : node.getParent().getIconPath();
+            final Map<Key, String> userData = new HashMap<>();
+            userData.put(SUBSCRIPTION_ID, sid);
+            userData.put(RESOURCE_ID, resourceId);
+            userData.put(WEBAPP_ID, node.getWebAppId());
+            userData.put(SLOT_NAME, node.getName());
+            itemVirtualFile = createVirtualFile(node.getWebAppName() + "-" + node.getName(),
+                type, iconPath, userData);
+        }
+        fileEditorManager.openFile(itemVirtualFile, true /*focusEditor*/, true /*searchForOpen*/);
+    }
+
+    @Override
+    public void openFunctionAppPropertyView(FunctionNode functionNode) {
+        final String subscriptionId = functionNode.getSubscriptionId();
+        final String functionApId = functionNode.getFunctionAppId();
+        final FileEditorManager fileEditorManager = getFileEditorManager(subscriptionId, functionApId, (Project) functionNode.getProject());
+        if (fileEditorManager == null) {
+            return;
+        }
+        final String type = FunctionAppPropertyViewProvider.TYPE;
+        LightVirtualFile itemVirtualFile = searchExistingFile(fileEditorManager, type, functionApId);
+        if (itemVirtualFile == null) {
+            final String iconPath = functionNode.getParent() == null ? functionNode.getIconPath()
+                    : functionNode.getParent().getIconPath();
+            itemVirtualFile = createVirtualFile(functionNode.getFunctionAppName(), type, iconPath, subscriptionId, functionApId);
         }
         fileEditorManager.openFile(itemVirtualFile, true /*focusEditor*/, true /*searchForOpen*/);
     }
@@ -417,8 +604,8 @@ public class UIHelperImpl implements UIHelper {
             T editedItem = editedFile.getUserData((Key<T>) name2Key.get(item.getClass()));
             StorageAccount editedStorageAccount = editedFile.getUserData(STORAGE_KEY);
             ClientStorageAccount editedClientStorageAccount = editedFile.getUserData(CLIENT_STORAGE_KEY);
-            if (((editedStorageAccount != null && editedStorageAccount.name().equals(accountName)) ||
-                    (editedClientStorageAccount != null && editedClientStorageAccount.getName().equals(accountName)))
+            if (((editedStorageAccount != null && editedStorageAccount.name().equals(accountName))
+                    || (editedClientStorageAccount != null && editedClientStorageAccount.getName().equals(accountName)))
                     && editedItem != null
                     && editedItem.getName().equals(item.getName())) {
                 return editedFile;
@@ -431,6 +618,14 @@ public class UIHelperImpl implements UIHelper {
     @Override
     public boolean isDarkTheme() {
         return UIUtil.isUnderDarcula();
+    }
+
+    public void closeSpringCloudAppPropertyView(@NotNull Object projectObject, String appId) {
+        final FileEditorManager fileEditorManager = FileEditorManager.getInstance((Project) projectObject);
+        LightVirtualFile file = searchExistingFile(fileEditorManager, SPRING_CLOUD_APP_PROPERTY_TYPE, appId);
+        if (file != null) {
+            ApplicationManager.getApplication().invokeLater(() -> fileEditorManager.closeFile(file));
+        }
     }
 
     @NotNull
@@ -446,7 +641,8 @@ public class UIHelperImpl implements UIHelper {
 
         if (suggestDetail) {
             String separator = headerMessage.matches("^.*\\d$||^.*\\w$") ? ". " : " ";
-            headerMessage = headerMessage + separator + "Click on '" + ErrorMessageForm.advancedInfoText + "' for detailed information on the cause of the error.";
+            headerMessage = headerMessage + separator + "Click on '" +
+                    ErrorMessageForm.advancedInfoText + "' for detailed information on the cause of the error.";
         }
 
         return headerMessage;
@@ -491,6 +687,15 @@ public class UIHelperImpl implements UIHelper {
         return virtualFile;
     }
 
+    private LightVirtualFile createVirtualFile(String name, String type, String icon, Map<Key, String> userData) {
+        LightVirtualFile itemVirtualFile = new LightVirtualFile(name);
+        itemVirtualFile.setFileType(getFileType(type, icon));
+        for (final Map.Entry<Key, String> data : userData.entrySet()) {
+            itemVirtualFile.putUserData(data.getKey(), data.getValue());
+        }
+        return itemVirtualFile;
+    }
+
     private LightVirtualFile createVirtualFile(String name, String type, String icon, String sid, String resId) {
         LightVirtualFile itemVirtualFile = new LightVirtualFile(name);
         itemVirtualFile.setFileType(getFileType(type, icon));
@@ -512,7 +717,9 @@ public class UIHelperImpl implements UIHelper {
     }
 
     public static String readableFileSize(long size) {
-        if (size <= 0) return "0";
+        if (size <= 0) {
+            return "0";
+        }
         final String[] units = new String[]{"B", "kB", "MB", "GB", "TB"};
         int digitGroups = (int) (Math.log10(size) / Math.log10(1024));
         return new DecimalFormat("#,##0.#").format(size / Math.pow(1024, digitGroups)) + " " + units[digitGroups];

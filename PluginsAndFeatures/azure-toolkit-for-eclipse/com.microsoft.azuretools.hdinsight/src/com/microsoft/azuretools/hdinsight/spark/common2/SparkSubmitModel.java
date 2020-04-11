@@ -1,44 +1,28 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
- * <p/>
+ *
  * All rights reserved.
- * <p/>
+ *
  * MIT License
- * <p/>
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
  * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- * <p/>
+ *
  * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
  * the Software.
- * <p/>
+ *
  * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
 package com.microsoft.azuretools.hdinsight.spark.common2;
 
-import com.google.common.reflect.TypeToken;
-import com.google.gson.Gson;
-import com.microsoft.azure.hdinsight.common.ClusterManagerEx;
-import com.microsoft.azure.hdinsight.sdk.cluster.IClusterDetail;
-import com.microsoft.azure.hdinsight.sdk.common.AuthenticationException;
-import com.microsoft.azure.hdinsight.sdk.common.HDIException;
-import com.microsoft.azure.hdinsight.sdk.common.HttpResponse;
-import com.microsoft.azure.hdinsight.spark.common.SparkBatchSubmission;
-import com.microsoft.azure.hdinsight.spark.common.SparkSubmissionParameter;
-import com.microsoft.azure.hdinsight.spark.common.SparkSubmitResponse;
-import com.microsoft.azure.hdinsight.spark.jobs.JobUtils;
-import com.microsoft.tooling.msservices.components.DefaultLoader;
-import com.microsoft.azuretools.azurecommons.helpers.NotNull;
-import com.microsoft.azuretools.azurecommons.helpers.StringHelper;
-import com.microsoft.azuretools.telemetry.AppInsightsClient;
-import com.microsoft.azuretools.hdinsight.SparkSubmissionToolWindowView;
-import com.microsoft.azuretools.hdinsight.common2.HDInsightUtil;
-import com.microsoft.azuretools.core.utils.Messages;
+import static com.microsoft.azuretools.telemetry.TelemetryConstants.HDINSIGHT;
 
 import java.io.File;
 import java.io.IOException;
@@ -64,14 +48,33 @@ import org.eclipse.jdt.internal.ui.jarpackager.JarFileExportOperation;
 import org.eclipse.jdt.ui.jarpackager.JarPackageData;
 import org.eclipse.swt.widgets.Display;
 
+import com.google.common.reflect.TypeToken;
+import com.google.gson.Gson;
+import com.microsoft.azure.hdinsight.common.ClusterManagerEx;
+import com.microsoft.azure.hdinsight.sdk.cluster.ClusterDetail;
+import com.microsoft.azure.hdinsight.sdk.cluster.IClusterDetail;
+import com.microsoft.azure.hdinsight.sdk.common.AuthenticationException;
+import com.microsoft.azure.hdinsight.sdk.common.HDIException;
+import com.microsoft.azure.hdinsight.sdk.common.HttpResponse;
+import com.microsoft.azure.hdinsight.spark.common.SparkBatchSubmission;
+import com.microsoft.azure.hdinsight.spark.common.SparkSubmissionParameter;
+import com.microsoft.azure.hdinsight.spark.common.SparkSubmitResponse;
+import com.microsoft.azure.hdinsight.spark.jobs.JobUtils;
+import com.microsoft.azuretools.azurecommons.helpers.NotNull;
+import com.microsoft.azuretools.azurecommons.helpers.StringHelper;
+import com.microsoft.azuretools.core.utils.Messages;
+import com.microsoft.azuretools.hdinsight.SparkSubmissionToolWindowView;
+import com.microsoft.azuretools.hdinsight.common2.HDInsightUtil;
+import com.microsoft.azuretools.telemetry.AppInsightsClient;
+import com.microsoft.azuretools.telemetrywrapper.EventType;
+import com.microsoft.azuretools.telemetrywrapper.EventUtil;
+import com.microsoft.tooling.msservices.components.DefaultLoader;
+
 public class SparkSubmitModel {
     // private static final String[] columns = {"Key", "Value", ""};
     private  static final String SparkYarnLogUrlFormat = "%s/yarnui/hn/cluster/app/%s";
 
     private List<IClusterDetail> cachedClusterDetails;
-
-    private Map<String, IClusterDetail> mapClusterNameToClusterDetail = new HashMap<>();
-
 
     private SparkSubmissionParameter submissionParameter;
 
@@ -79,7 +82,6 @@ public class SparkSubmitModel {
 
     public SparkSubmitModel(@NotNull List<IClusterDetail> cachedClusterDetails) {
         this.cachedClusterDetails = cachedClusterDetails;
-        setClusterDetailsMap(cachedClusterDetails);
     }
 
     public SparkSubmissionParameter getSubmissionParameter() {
@@ -91,16 +93,9 @@ public class SparkSubmitModel {
         return submissionParameter.isLocalArtifact();
     }
 
-    public void setClusterDetailsMap(List<IClusterDetail> cachedClusterDetails) {
-        mapClusterNameToClusterDetail.clear();
-
-        for (IClusterDetail clusterDetail : cachedClusterDetails) {
-            mapClusterNameToClusterDetail.put(clusterDetail.getName(), clusterDetail);
-        }
-    }
     public void action(@NotNull SparkSubmissionParameter submissionParameter) {
         this.submissionParameter = submissionParameter;
-        
+
         if (isLocalArtifact()) {
             submit();
         } else {
@@ -112,7 +107,7 @@ public class SparkSubmitModel {
             job.addJobChangeListener(new JobChangeAdapter() {
                 public void done(IJobChangeEvent event) {
                     if (event.getResult().isOK()) {
-                        submit();						
+                        submit();
                     }
                 };
             });
@@ -122,7 +117,7 @@ public class SparkSubmitModel {
     private class JarExportJob extends Job {
         private IProject project;
         private String errorMessage;
-        
+
         public JarExportJob(String name, IProject project) {
             super(name);
             this.project = project;
@@ -135,11 +130,11 @@ public class SparkSubmitModel {
                 // TODO： IncrementalProjectBuilder
                 // build will new thread to run and we have no better way to get status of the thread
                 //project.build(IncrementalProjectBuilder.CLEAN_BUILD, monitor);
-                
+
                 super.setName("");
                 final JarPackageData jarPackageData = new JarPackageData();
                 jarPackageData.setElements(new Object[]{project});
-                
+
                 jarPackageData.setExportClassFiles(true);
                 jarPackageData.setBuildIfNeeded(true);
                 jarPackageData.setExportOutputFolders(true);
@@ -152,12 +147,12 @@ public class SparkSubmitModel {
                 jarPackageData.setOverwrite(true);
                 String dest = String.format("%s%s%s%s", project.getLocation(), File.separator, project.getName(), ".jar");
                 IPath destPath = new Path(dest);
-                
+
                 jarPackageData.setJarLocation(destPath);
                 monitor.worked(5);
                 monitor.setTaskName("Creating Jar file...");
                 Display.getDefault().syncExec(new Runnable() {
-                    
+
                     @SuppressWarnings("restriction")
                     @Override
                     public void run() {
@@ -171,7 +166,7 @@ public class SparkSubmitModel {
                             // TODO Auto-generated catch block
                             e.printStackTrace();
                         }
-                        
+
                     }
                 });
             } catch (Exception ex) {
@@ -184,11 +179,11 @@ public class SparkSubmitModel {
               return Status.CANCEL_STATUS;
             } else {
                 return Status.OK_STATUS;
-            }    
+            }
         }
-        
+
     }
-    
+
     private void uploadFileToCluster(@NotNull final IClusterDetail selectedClusterDetail, @NotNull final String selectedArtifactName) throws Exception {
         String buildJarPath;
         if (submissionParameter.isLocalArtifact()) {
@@ -197,17 +192,17 @@ public class SparkSubmitModel {
             IWorkspaceRoot root = ResourcesPlugin.getWorkspace().getRoot();
             IProject proj = root.getProject(submissionParameter.getArtifactName());
             buildJarPath = String.format("%s%s%s%s", proj.getLocation(), File.separator, proj.getName(), ".jar");
-             
+
         }
-        
+
         String filePath = selectedClusterDetail.isEmulator() ?
                 SparkSubmitHelper.uploadFileToEmulator(selectedClusterDetail, buildJarPath) :
                 (selectedClusterDetail.getStorageAccount() == null ? SparkSubmitHelper.uploadFileToHDFS(selectedClusterDetail, buildJarPath) :
                     JobUtils.uploadFileToAzure(new File(buildJarPath), selectedClusterDetail.getStorageAccount(), selectedClusterDetail.getStorageAccount().getDefaultContainerOrRootPath(), JobUtils.getFormatPathByDate(), HDInsightUtil.getToolWindowMessageSubject(), null));
         submissionParameter.setFilePath(filePath);
     }
-    
-    
+
+
     private void tryToCreateBatchSparkJob(@NotNull final IClusterDetail selectedClusterDetail) throws HDIException,IOException {
         SparkBatchSubmission.getInstance().setUsernamePasswordCredential(selectedClusterDetail.getHttpUserName(), selectedClusterDetail.getHttpPassword());
         HttpResponse response = SparkBatchSubmission.getInstance().createBatchSparkJob(SparkSubmitHelper.getLivyConnectionURL(selectedClusterDetail), submissionParameter);
@@ -217,7 +212,7 @@ public class SparkSubmitModel {
             postEventProperty.put("IsSubmitSucceed", "true");
 
             String jobLink = String.format("%s/sparkhistory", selectedClusterDetail.getConnectionUrl());
-            
+
             HDInsightUtil.setHyperLinkWithText("See spark job view from ", jobLink, jobLink);
             @SuppressWarnings("serial")
             final SparkSubmitResponse sparkSubmitResponse = new Gson().fromJson(response.getMessage(), new TypeToken<SparkSubmitResponse>() {
@@ -240,6 +235,7 @@ public class SparkSubmitModel {
             postEventProperty.put("IsSubmitSucceed", "false");
             postEventProperty.put("SubmitFailedReason", response.getContent());
             AppInsightsClient.create(Messages.SparkSubmissionButtonClickEvent, null, postEventProperty);
+            EventUtil.logEvent(EventType.info, HDINSIGHT, Messages.SparkSubmissionButtonClickEvent, null);
         }
     }
 
@@ -248,6 +244,7 @@ public class SparkSubmitModel {
         postEventProperty.put("IsSubmitSucceed", "false");
         postEventProperty.put("SubmitFailedReason", exception.toString());
         AppInsightsClient.create(Messages.SparkSubmissionButtonClickEvent, null, postEventProperty);
+        EventUtil.logEvent(EventType.info, HDINSIGHT, Messages.SparkSubmissionButtonClickEvent, null);
     }
 
     private void writeJobLogToLocal() {
@@ -297,16 +294,30 @@ public class SparkSubmitModel {
         DefaultLoader.getIdeHelper().executeOnPooledThread(new Runnable() {
             @Override
             public void run() {
-                IClusterDetail selectedClusterDetail = mapClusterNameToClusterDetail.get(submissionParameter.getClusterName());
-                String selectedArtifactName = submissionParameter.getArtifactName();
-
-                //may get a new clusterDetail reference if cluster credentials expired
-                selectedClusterDetail = getClusterConfiguration(selectedClusterDetail, true);
-
+                // Validate the selected cluster
+                String selectedClusterName = submissionParameter.getClusterName();
+                IClusterDetail selectedClusterDetail = ClusterManagerEx.getInstance().getClusterDetailByName(selectedClusterName).orElse(null);
                 if (selectedClusterDetail == null) {
-                    HDInsightUtil.showErrorMessageOnSubmissionMessageWindow("Selected Cluster can not found. Please login in first in HDInsight Explorer and try submit job again");
+                    HDInsightUtil.showErrorMessageOnSubmissionMessageWindow("Selected Cluster can not found. "
+                            + "Please login in first in HDInsight Explorer and try submit job again");
                     return;
+                } else if (ClusterManagerEx.getInstance().isHdiReaderCluster(selectedClusterDetail)) {
+                    if (((ClusterDetail)selectedClusterDetail).getHttpUserName() == null
+                            || ((ClusterDetail)selectedClusterDetail).getHttpPassword() == null) {
+                        HDInsightUtil.showErrorMessageOnSubmissionMessageWindow("No Ambari permission to submit job to the selected cluster.");
+                        return;
+                    }
+                } else {
+                    //may get a new clusterDetail reference if cluster credentials expired
+                    selectedClusterDetail = getClusterConfiguration(selectedClusterDetail, true);
+                    if (selectedClusterDetail == null) {
+                        HDInsightUtil.showErrorMessageOnSubmissionMessageWindow("Selected Cluster can not found. "
+                                + "Please login in first in HDInsight Explorer and try submit job again");
+                        return;
+                    }
                 }
+
+                String selectedArtifactName = submissionParameter.getArtifactName();
 
                 try {
                     uploadFileToCluster(selectedClusterDetail, selectedArtifactName);
@@ -332,7 +343,7 @@ public class SparkSubmitModel {
             }
         });
     }
-//
+
     private void postEventAction() {
         postEventProperty.clear();
         postEventProperty.put("ClusterName", submissionParameter.getClusterName());

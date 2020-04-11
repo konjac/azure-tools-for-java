@@ -1,29 +1,37 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
  *
  * All rights reserved.
  *
  * MIT License
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files
- * (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge,
- * publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so,
- * subject to the following conditions:
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+ * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
+ * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+ * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
+ * the Software.
  *
- * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR
- * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH
- * THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
+
 package com.microsoft.azuretools.azureexplorer.helpers;
 
+import com.microsoft.azuretools.azureexplorer.editors.webapp.DeploymentSlotEditor;
+import com.microsoft.azuretools.azureexplorer.editors.webapp.DeploymentSlotPropertyEditorInput;
+import com.microsoft.azuretools.telemetry.TelemetryConstants;
+import com.microsoft.azuretools.telemetrywrapper.EventUtil;
 import java.io.File;
 import java.net.URL;
 import java.text.DecimalFormat;
 import java.util.Map;
 
+import com.microsoft.tooling.msservices.serviceexplorer.azure.arm.deployments.DeploymentNode;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.widgets.Display;
@@ -61,9 +69,11 @@ import com.microsoft.tooling.msservices.model.storage.ClientStorageAccount;
 import com.microsoft.tooling.msservices.model.storage.Queue;
 import com.microsoft.tooling.msservices.model.storage.StorageServiceTreeItem;
 import com.microsoft.tooling.msservices.model.storage.Table;
+import com.microsoft.tooling.msservices.serviceexplorer.Node;
 import com.microsoft.tooling.msservices.serviceexplorer.azure.container.ContainerRegistryNode;
 import com.microsoft.tooling.msservices.serviceexplorer.azure.rediscache.RedisCacheNode;
 import com.microsoft.tooling.msservices.serviceexplorer.azure.webapp.WebAppNode;
+import com.microsoft.tooling.msservices.serviceexplorer.azure.webapp.deploymentslot.DeploymentSlotNode;
 
 public class UIHelperImpl implements UIHelper {
     private Map<Class<? extends StorageServiceTreeItem>, String> type2Editor = ImmutableMap.of(BlobContainer.class, "com.microsoft.azuretools.azureexplorer.editors.BlobExplorerFileEditor",
@@ -80,16 +90,16 @@ public class UIHelperImpl implements UIHelper {
                               final String title,
                               final boolean appendEx,
                               final boolean suggestDetail) {
-    	if (Display.getCurrent() == null) {
-    		Display.getDefault().asyncExec(new Runnable() {
-    			@Override
-    			public void run() {
-    				PluginUtil.displayErrorDialogAndLog(null, title, message, ex);
-    			}
-    		});
-    	} else {
-    		PluginUtil.displayErrorDialogAndLog(null, title, message, ex);
-    	}
+        if (Display.getCurrent() == null) {
+            Display.getDefault().asyncExec(new Runnable() {
+                @Override
+                public void run() {
+                    PluginUtil.displayErrorDialogAndLog(null, title, message, ex);
+                }
+            });
+        } else {
+            PluginUtil.displayErrorDialogAndLog(null, title, message, ex);
+        }
     }
 
     @Override
@@ -132,6 +142,12 @@ public class UIHelperImpl implements UIHelper {
         } else {
             return new File(fileName);
         }
+    }
+
+    @Override
+    public File showFileSaver(String s, String s1) {
+        // todo
+        return null;
     }
 
     @Override
@@ -196,7 +212,7 @@ public class UIHelperImpl implements UIHelper {
         DefaultLoader.getIdeHelper().invokeLater(new Runnable() {
             @Override
             public void run() {
-            	// TODO
+                // TODO
 //                try {
 //                    IWorkbenchPage page = PlatformUI.getWorkbench().getActiveWorkbenchWindow().getActivePage();
 //                    QueueFileEditor newEditor = (QueueFileEditor) page.openEditor(new StorageEditorInput(storageAccount, queue), editorDescriptor.getId());
@@ -216,7 +232,7 @@ public class UIHelperImpl implements UIHelper {
         DefaultLoader.getIdeHelper().invokeLater(new Runnable() {
             @Override
             public void run() {
-            	//TODO
+                //TODO
 //                try {
 //                    IWorkbenchPage page = PlatformUI.getWorkbench().getActiveWorkbenchWindow().getActivePage();
 //                    BlobExplorerFileEditor newEditor = (BlobExplorerFileEditor) page.openEditor(new StorageEditorInput(storageAccount, container), editorDescriptor.getId());
@@ -236,7 +252,7 @@ public class UIHelperImpl implements UIHelper {
         DefaultLoader.getIdeHelper().invokeLater(new Runnable() {
             @Override
             public void run() {
-            	// TODO
+                // TODO
                 /*try {
                     IWorkbenchPage page = PlatformUI.getWorkbench().getActiveWorkbenchWindow().getActivePage();
                     TableFileEditor newEditor = (TableFileEditor) page.openEditor(new StorageEditorInput(storageAccount, table), editorDescriptor.getId());
@@ -268,12 +284,14 @@ public class UIHelperImpl implements UIHelper {
 
     @Override
     public void openRedisPropertyView(RedisCacheNode node) {
-        String sid = node.getSubscriptionId();
-        String resId = node.getResourceId();
-        if (sid == null || resId == null) {
-            return;
-        }
-        openView(RedisPropertyView.ID, sid, resId);
+        EventUtil.executeWithLog(TelemetryConstants.REDIS, TelemetryConstants.REDIS_READPROP, (operation) -> {
+            String sid = node.getSubscriptionId();
+            String resId = node.getResourceId();
+            if (sid == null || resId == null) {
+                return;
+            }
+            openView(RedisPropertyView.ID, sid, resId);
+        });
     }
 
     @Override
@@ -283,6 +301,16 @@ public class UIHelperImpl implements UIHelper {
                 node.getResourceId(), node.getName());
         IEditorDescriptor descriptor = workbench.getEditorRegistry().findEditor(RedisExplorerEditor.ID);
         openEditor(EditorType.REDIS_EXPLORER, input, descriptor);
+    }
+
+    @Override
+    public void openDeploymentPropertyView(DeploymentNode deploymentNode) {
+        // TODO Auto-generated method stub
+    }
+
+    @Override
+    public void openResourceTemplateView(DeploymentNode deploymentNode, String s) {
+        // TODO Auto-generated method stub
     }
 
     @Override
@@ -373,4 +401,28 @@ public class UIHelperImpl implements UIHelper {
         IEditorDescriptor descriptor = workbench.getEditorRegistry().findEditor(WebAppPropertyEditor.ID);
         openEditor(EditorType.WEBAPP_EXPLORER, input, descriptor);
     }
+
+    @Override
+    public void openDeploymentSlotPropertyView(final DeploymentSlotNode node) {
+        if (Utils.isEmptyString(node.getId())) {
+            return;
+        }
+        IWorkbench workbench = PlatformUI.getWorkbench();
+        DeploymentSlotPropertyEditorInput input = new DeploymentSlotPropertyEditorInput(node.getId(),
+            node.getSubscriptionId(), node.getWebAppId(), node.getName());
+        IEditorDescriptor descriptor = workbench.getEditorRegistry().findEditor(DeploymentSlotEditor.ID);
+        openEditor(EditorType.WEBAPP_EXPLORER, input, descriptor);
+    }
+
+    @Override
+    public void showInfo(Node node, String message) {
+        // TODO Auto-generated method stub
+
+    }
+
+    @Override
+    public void showError(Node node, String s) {
+        // TODO Auto-generated method stub
+    }
+
 }

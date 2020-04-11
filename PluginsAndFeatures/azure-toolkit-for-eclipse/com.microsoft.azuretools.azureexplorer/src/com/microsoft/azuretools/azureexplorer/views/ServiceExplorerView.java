@@ -1,22 +1,25 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
  *
  * All rights reserved.
  *
  * MIT License
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files
- * (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge,
- * publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so,
- * subject to the following conditions:
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+ * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
+ * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+ * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
+ * the Software.
  *
- * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR
- * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH
- * THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
+
 package com.microsoft.azuretools.azureexplorer.views;
 
 import java.beans.PropertyChangeEvent;
@@ -43,6 +46,8 @@ import org.eclipse.jface.viewers.TreeViewer;
 import org.eclipse.jface.viewers.Viewer;
 import org.eclipse.jface.viewers.ViewerSorter;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.events.KeyAdapter;
+import org.eclipse.swt.events.KeyEvent;
 import org.eclipse.swt.events.MouseAdapter;
 import org.eclipse.swt.events.MouseEvent;
 import org.eclipse.swt.graphics.Image;
@@ -57,6 +62,7 @@ import org.eclipse.ui.part.ViewPart;
 
 import com.microsoft.azure.hdinsight.serverexplore.HDInsightRootModuleImpl;
 import com.microsoft.azuretools.authmanage.AuthMethodManager;
+import com.microsoft.azuretools.azurecommons.helpers.NotNull;
 import com.microsoft.azuretools.azureexplorer.Activator;
 import com.microsoft.azuretools.azureexplorer.AzureModuleImpl;
 import com.microsoft.azuretools.core.handlers.SelectSubsriptionsCommandHandler;
@@ -138,10 +144,20 @@ public class ServiceExplorerView extends ViewPart implements PropertyChangeListe
                 return false;
         }
 
-        private void initialize() {
-            azureModule = new AzureModuleImpl();
+        private void setHDInsightRootModule(@NotNull AzureModule azureModule) {
             HDInsightRootModuleImpl hdInsightRootModule =  new HDInsightRootModuleImpl(azureModule);
             azureModule.setHdInsightModule(hdInsightRootModule);
+
+            // Enable HDInsight new SDK for Eclipse
+            DefaultLoader.getIdeHelper().setApplicationProperty(
+                    com.microsoft.azure.hdinsight.common.CommonConst.ENABLE_HDINSIGHT_NEW_SDK, "true");
+
+        }
+
+        private void initialize() {
+            azureModule = new AzureModuleImpl();
+
+            setHDInsightRootModule(azureModule);
             invisibleRoot = new TreeNode(null);
             invisibleRoot.add(createTreeNode(azureModule));
 
@@ -240,7 +256,12 @@ public class ServiceExplorerView extends ViewPart implements PropertyChangeListe
             switch (e.getAction()) {
             case add:
                 // create child tree nodes for the new nodes
-                for(Node childNode : (Collection<Node>)e.getNewItems()) {
+                for (Node childNode : (Collection<Node>) e.getNewItems()) {
+                    // Eclipse do no support arm, so here need to skip resource management node
+                    if (childNode.getClass().getName().equals(
+                            "com.microsoft.tooling.msservices.serviceexplorer.azure.arm.ResourceManagementModule")) {
+                        continue;
+                    }
                     treeNode.add(createTreeNode(childNode));
                 }
                 break;
@@ -309,6 +330,7 @@ public class ServiceExplorerView extends ViewPart implements PropertyChangeListe
         makeActions();
         hookContextMenu();
         hookMouseActions();
+        hookShortcut();
         contributeToActionBars();
     }
 
@@ -455,6 +477,23 @@ public class ServiceExplorerView extends ViewPart implements PropertyChangeListe
                     }
                 }
             }
+        });
+    }
+
+    private void hookShortcut() {
+        Tree tree = (Tree) viewer.getControl();
+        tree.addKeyListener(new KeyAdapter() {
+          public void keyReleased(KeyEvent event) {
+            if (event.keyCode == SWT.CR && tree.getSelectionCount() > 0) {
+              final TreeItem item = tree.getSelection()[0];
+              Node node = ((TreeNode) item.getData()).node;
+              // if the node in question is in a "loading" state then
+              // we do not propagate the click event to it
+              if (!node.isLoading()) {
+                  node.getClickAction().fireNodeActionEvent();
+              }
+            }
+          }
         });
     }
 

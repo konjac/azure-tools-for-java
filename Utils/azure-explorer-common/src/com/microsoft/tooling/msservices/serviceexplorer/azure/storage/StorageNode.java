@@ -1,24 +1,25 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
- * <p/>
+ *
  * All rights reserved.
- * <p/>
+ *
  * MIT License
- * <p/>
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
  * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- * <p/>
+ *
  * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
  * the Software.
- * <p/>
+ *
  * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
 package com.microsoft.tooling.msservices.serviceexplorer.azure.storage;
 
 import com.microsoft.azure.management.Azure;
@@ -29,19 +30,20 @@ import com.microsoft.azuretools.sdkmanage.AzureManager;
 import com.microsoft.azuretools.telemetry.AppInsightsConstants;
 import com.microsoft.azuretools.telemetry.TelemetryProperties;
 import com.microsoft.tooling.msservices.components.DefaultLoader;
-import com.microsoft.tooling.msservices.helpers.azure.sdk.StorageClientSDKManager;
-import com.microsoft.tooling.msservices.model.storage.BlobContainer;
 import com.microsoft.tooling.msservices.serviceexplorer.Node;
 import com.microsoft.tooling.msservices.serviceexplorer.NodeActionEvent;
 import com.microsoft.tooling.msservices.serviceexplorer.NodeActionListener;
-import com.microsoft.tooling.msservices.serviceexplorer.RefreshableNode;
+import com.microsoft.tooling.msservices.serviceexplorer.azure.AzureNodeActionListener;
 import com.microsoft.tooling.msservices.serviceexplorer.azure.AzureNodeActionPromptListener;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
-public class StorageNode extends RefreshableNode implements TelemetryProperties {
+import static com.microsoft.azuretools.telemetry.TelemetryConstants.DELETE_STORAGE_ACCOUNT;
+import static com.microsoft.azuretools.telemetry.TelemetryConstants.OPEN_STORAGE_IN_PORTAL;
+import static com.microsoft.azuretools.telemetry.TelemetryConstants.STORAGE;
+
+public class StorageNode extends Node implements TelemetryProperties {
     private static final String STORAGE_ACCOUNT_ICON_PATH = "StorageAccount_16.png";
 
     private final StorageAccount storageAccount;
@@ -62,6 +64,33 @@ public class StorageNode extends RefreshableNode implements TelemetryProperties 
         properties.put(AppInsightsConstants.SubscriptionId, this.subscriptionId);
         properties.put(AppInsightsConstants.Region, this.storageAccount.regionName());
         return properties;
+    }
+
+    public class OpenInPortalAction extends AzureNodeActionListener {
+
+        public OpenInPortalAction() {
+            super(StorageNode.this, "View storage in portal");
+        }
+
+        @Override
+        protected void azureNodeAction(NodeActionEvent e) throws AzureCmdException {
+            openResourcesInPortal(subscriptionId, storageAccount.id());
+        }
+
+        @Override
+        protected void onSubscriptionsChanged(NodeActionEvent e) throws AzureCmdException {
+
+        }
+
+        @Override
+        protected String getServiceName(NodeActionEvent event) {
+            return STORAGE;
+        }
+
+        @Override
+        protected String getOperationName(NodeActionEvent event) {
+            return OPEN_STORAGE_IN_PORTAL;
+        }
     }
 
     public class DeleteStorageAccountAction extends AzureNodeActionPromptListener {
@@ -98,19 +127,21 @@ public class StorageNode extends RefreshableNode implements TelemetryProperties 
         @Override
         protected void onSubscriptionsChanged(NodeActionEvent e) throws AzureCmdException {
         }
-    }
 
-    @Override
-    protected void refreshItems() throws AzureCmdException {
-        List<BlobContainer> containerList = StorageClientSDKManager.getManager()
-                .getBlobContainers(StorageClientSDKManager.getConnectionString(storageAccount));
-        for (BlobContainer blobContainer : containerList) {
-            addChildNode(new ContainerNode(this, storageAccount, blobContainer));
+        @Override
+        protected String getServiceName(NodeActionEvent event) {
+            return STORAGE;
+        }
+
+        @Override
+        protected String getOperationName(NodeActionEvent event) {
+            return DELETE_STORAGE_ACCOUNT;
         }
     }
 
     @Override
     protected Map<String, Class<? extends NodeActionListener>> initActions() {
+        addAction("Open in Portal", new OpenInPortalAction());
         addAction("Delete", new DeleteStorageAccountAction());
         return super.initActions();
     }

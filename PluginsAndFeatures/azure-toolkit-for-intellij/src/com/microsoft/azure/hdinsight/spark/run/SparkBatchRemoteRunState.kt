@@ -25,61 +25,77 @@ package com.microsoft.azure.hdinsight.spark.run
 import com.intellij.execution.ExecutionException
 import com.intellij.execution.ExecutionResult
 import com.intellij.execution.Executor
+import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.runners.ProgramRunner
 import com.intellij.execution.ui.ConsoleView
 import com.intellij.execution.ui.ConsoleViewContentType
-import com.intellij.ide.BrowserUtil
-import com.microsoft.azure.hdinsight.common.HDInsightUtil
-import com.microsoft.azure.hdinsight.common.MessageInfoType
+import com.microsoft.azure.hdinsight.common.classifiedexception.ClassifiedExceptionFactory
+import com.microsoft.azure.hdinsight.common.print
+import com.microsoft.azure.hdinsight.spark.common.ISparkBatchJob
 import com.microsoft.azure.hdinsight.spark.common.SparkSubmitModel
+import com.microsoft.azuretools.telemetry.TelemetryProperties
+import com.microsoft.azuretools.telemetrywrapper.Operation
 import com.microsoft.intellij.hdinsight.messages.HDInsightBundle
-import java.io.PrintWriter
-import java.io.StringWriter
-import java.net.URI
 import java.util.*
 
-open class SparkBatchRemoteRunState(val serverlessSparkSubmitModel: SparkSubmitModel)
-    : RunProfileStateWithAppInsightsEvent, SparkBatchRemoteRunProfileState  {
+open class SparkBatchRemoteRunState(private val sparkSubmitModel: SparkSubmitModel,
+                                    operation: Operation?,
+                                    override var sparkBatch: ISparkBatchJob)
+    : RunProfileStateWithAppInsightsEvent(UUID.randomUUID().toString(),
+                                          HDInsightBundle.message("SparkRunConfigRunButtonClick")!!,
+                                          operation),
+      SparkBatchRemoteRunProfileState,
+      TelemetryProperties {
     override var remoteProcessCtrlLogHandler: SparkBatchJobProcessCtrlLogOut? = null
     override var executionResult: ExecutionResult? = null
     override var consoleView: ConsoleView? = null
-    override val uuid = UUID.randomUUID().toString()
-    override val appInsightsMessage = HDInsightBundle.message("SparkRunConfigRunButtonClick")!!
+    private var isStopButtonClicked: Boolean = false
+        get() = remoteProcessCtrlLogHandler?.getUserData(ProcessHandler.TERMINATION_REQUESTED) == true
+    private var isDisconnectButtonClicked: Boolean = false
+    private var isArtifactUploaded: Boolean = false
+    private var isSubmitSucceed: Boolean = false
+    private var isJobKilled: Boolean = false
+    private var isJobRunSucceed: Boolean? = null
+    private var jobState: String? = null
+    private var diagnostics: String? = null
 
     override fun execute(executor: Executor?, programRunner: ProgramRunner<*>): ExecutionResult? {
-        if (remoteProcessCtrlLogHandler == null || executionResult == null || consoleView == null) {
+        val sparkConsoleView = consoleView
+        if (remoteProcessCtrlLogHandler == null || executionResult == null || sparkConsoleView == null) {
             throw ExecutionException("Spark Batch Job execution result is not ready")
         }
 
         return executor?.let {
-            remoteProcessCtrlLogHandler!!.getCtrlSubject().subscribe(
-                    { messageWithType ->
-                        // Redirect the remote process control message to console view
-                        when (messageWithType.key) {
-                            MessageInfoType.Info ->
-                                consoleView!!.print("INFO: ${messageWithType.value}\n", ConsoleViewContentType.SYSTEM_OUTPUT)
-                            MessageInfoType.Warning, MessageInfoType.Log ->
-                                consoleView!!.print("LOG: ${messageWithType.value}\n", ConsoleViewContentType.SYSTEM_OUTPUT)
-                            MessageInfoType.Hyperlink ->
-                                BrowserUtil.browse(URI.create(messageWithType.value))
-                            else ->
-                                consoleView!!.print("ERROR: ${messageWithType.value}\n", ConsoleViewContentType.ERROR_OUTPUT)
+            remoteProcessCtrlLogHandler!!.getEventSubject()
+                    .subscribe({
+                        when (it) {
+                            is SparkBatchJobArtifactUploadedEvent -> this.isArtifactUploaded = true
+                            is SparkBatchJobSubmittedEvent -> this.isSubmitSucceed = true
+                            is SparkBatchJobKilledEvent -> this.isJobKilled = true
+                            is SparkBatchJobFinishedEvent -> {
+                                this.isJobRunSucceed = it.isJobSucceed
+                                this.jobState = it.state
+                                this.diagnostics = it.diagnostics
+                            }
+                            is SparkBatchJobDisconnectEvent -> this.isDisconnectButtonClicked = true
+                            else -> {
+                            }
                         }
-                    },
+                    }, {})
+            remoteProcessCtrlLogHandler!!.getCtrlSubject().subscribe(
+                    { messageWithType -> sparkConsoleView.print(messageWithType) },
                     { err ->
-                        val errWriter = StringWriter()
-                        err.printStackTrace(PrintWriter(errWriter))
+                        val classifiedEx = ClassifiedExceptionFactory.createClassifiedException(err)
+                        classifiedEx.logStackTrace()
 
-                        val errMessage = Optional.ofNullable(err.message)
-                                .orElse(err.toString()) + "\n stack trace: " + errWriter.buffer.toString()
+                        createAppInsightEvent(it, toProperties())
+                        createErrorEventWithComplete(it, classifiedEx, classifiedEx.errorType, toProperties())
 
-                        createAppInsightEvent(it, mapOf(
-                                "IsSubmitSucceed" to "false",
-                                "SubmitFailedReason" to HDInsightUtil.normalizeTelemetryMessage(errMessage)))
-
+                        val errMessage = classifiedEx.message
                         consoleView!!.print("ERROR: $errMessage", ConsoleViewContentType.ERROR_OUTPUT)
+                        classifiedEx.handleByUser()
                     },
-                    { onSuccess(it) })
+                    { onComplete(it) })
 
             programRunner.onProcessStarted(null, executionResult)
 
@@ -87,28 +103,24 @@ open class SparkBatchRemoteRunState(val serverlessSparkSubmitModel: SparkSubmitM
         }
     }
 
-    @Throws(ExecutionException::class)
-    override fun checkSubmissionParameter() {
-        val parameter = getSubmitModel().submissionParameter
-
-        if (parameter.clusterName.isNullOrBlank()) {
-            throw ExecutionException("The HDInsight cluster to submit is not selected, please config it at 'Run/Debug configuration -> Remotely Run in Cluster'.")
-        }
-
-        if (parameter.artifactName.isNullOrBlank()) {
-            throw ExecutionException("The artifact to submit is not selected, please config it at 'Run/Debug configuration -> Remotely Run in Cluster'.")
-        }
-
-        if (parameter.mainClassName.isNullOrBlank()) {
-            throw ExecutionException("The main class name is empty, please config it at 'Run/Debug configuration -> Remotely Run in Cluster'.")
-        }
-    }
-
     override fun getSubmitModel(): SparkSubmitModel {
-        return serverlessSparkSubmitModel
+        return sparkSubmitModel
     }
 
-    open fun onSuccess(executor: Executor) {
-        createAppInsightEvent(executor, mapOf("IsSubmitSucceed" to "true"))
+    open fun onComplete(executor: Executor) {
+        createAppInsightEvent(executor, toProperties())
+        createInfoEventWithComplete(executor, toProperties())
+    }
+
+    override fun toProperties(): MutableMap<String, String> {
+        return mutableMapOf(
+                "isArtifactUploaded" to isArtifactUploaded.toString(),
+                "isJobSubmitSucceed" to isSubmitSucceed.toString(),
+                "isJobKilled" to isJobKilled.toString(),
+                "isJobRunSucceed" to if (!isSubmitSucceed || isJobKilled) "false" else (isJobRunSucceed?.toString() ?: "unknown"),
+                "livyState" to (jobState ?: "unknown"),
+                "livyDiagnostics" to (diagnostics ?: "null"),
+                "isDisconnectButtonClicked" to isDisconnectButtonClicked.toString(),
+                "isStopButtonClicked" to isStopButtonClicked.toString())
     }
 }

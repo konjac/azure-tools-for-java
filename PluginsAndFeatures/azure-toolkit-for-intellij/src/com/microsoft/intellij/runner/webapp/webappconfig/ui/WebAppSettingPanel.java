@@ -22,6 +22,7 @@
 
 package com.microsoft.intellij.runner.webapp.webappconfig.ui;
 
+import com.microsoft.intellij.runner.webapp.webappconfig.slimui.creation.WebAppCreationDialog;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -83,6 +84,7 @@ public class WebAppSettingPanel extends AzureSettingPanel<WebAppConfiguration> i
     private static final String RESOURCE_GROUP = "Resource Group";
     private static final String APP_SERVICE_PLAN = "App Service Plan";
     private static final String RUNTIME = "Runtime";
+    private static final String DEPLOYMENT_SLOT = "Deployment Slot";
     private static final String NOT_APPLICABLE = "N/A";
     private static final String TABLE_LOADING_MESSAGE = "Loading ... ";
     private static final String TABLE_EMPTY_MESSAGE = "No available Web App.";
@@ -154,8 +156,10 @@ public class WebAppSettingPanel extends AzureSettingPanel<WebAppConfiguration> i
     private JTextField txtNewSlotName;
     private JComboBox cbSlotConfigurationSource;
     private JPanel pnlSlot;
+    private JPanel pnlSlotHolder;
     private JBTable table;
     private AnActionButton btnRefresh;
+
     /**
      * The setting panel for web app deployment run configuration.
      */
@@ -315,13 +319,17 @@ public class WebAppSettingPanel extends AzureSettingPanel<WebAppConfiguration> i
         javaDecorator.setContentComponent(pnlJava);
         javaDecorator.setOn(true);
 
+        HideableDecorator slotDecorator = new HideableDecorator(pnlSlotHolder, DEPLOYMENT_SLOT, true);
+        slotDecorator.setContentComponent(pnlSlot);
+        slotDecorator.setOn(true);
+
         lblJarDeployHint.setHyperlinkText(NON_WAR_FILE_DEPLOY_HINT);
     }
 
     @Override
     @NotNull
     public String getPanelName() {
-        return  "Run On Web App";
+        return "Run On Web App";
     }
 
     @Override
@@ -802,9 +810,11 @@ public class WebAppSettingPanel extends AzureSettingPanel<WebAppConfiguration> i
     @Override
     public void fillPricingTier(@NotNull List<PricingTier> prices) {
         cbPricing.removeAllItems();
+        final String pricingTier = StringUtils.isEmpty(webAppConfiguration.getPricing())
+            ? Constants.WEBAPP_DEFAULT_PRICING_TIER : webAppConfiguration.getPricing();
         for (PricingTier price : prices) {
             cbPricing.addItem(price);
-            if (Comparing.equal(price.toString(), webAppConfiguration.getPricing())) {
+            if (Comparing.equal(price.toString(), pricingTier)) {
                 cbPricing.setSelectedItem(price);
             }
         }
@@ -815,6 +825,10 @@ public class WebAppSettingPanel extends AzureSettingPanel<WebAppConfiguration> i
         cbWebContainer.removeAllItems();
         for (WebAppUtils.WebContainerMod container : webContainers) {
             cbWebContainer.addItem(container);
+            if (Comparing.equal(container.getValue(), WebAppCreationDialog.DEFAULT_WINDOWS_CONTAINER)
+                && cbWebContainer.getSelectedIndex() < 0) {
+                cbWebContainer.setSelectedItem(container);
+            }
             if (Comparing.equal(container.getValue(), webAppConfiguration.getWebContainer())) {
                 cbWebContainer.setSelectedItem(container);
             }
@@ -826,6 +840,10 @@ public class WebAppSettingPanel extends AzureSettingPanel<WebAppConfiguration> i
         cbJdkVersion.removeAllItems();
         for (JdkModel jdk : jdks) {
             cbJdkVersion.addItem(jdk);
+            if (Comparing.equal(jdk.getJavaVersion(), WebAppCreationDialog.DEFAULT_WINDOWS_JAVAVERSION)
+                && cbJdkVersion.getSelectedIndex() < 0) {
+                cbJdkVersion.setSelectedItem(jdk);
+            }
             if (Comparing.equal(jdk.getJavaVersion(), webAppConfiguration.getJdkVersion())) {
                 cbJdkVersion.setSelectedItem(jdk);
             }
@@ -837,7 +855,11 @@ public class WebAppSettingPanel extends AzureSettingPanel<WebAppConfiguration> i
         cbLinuxRuntime.removeAllItems();
         for(final RuntimeStack runtime: linuxRuntimes) {
             cbLinuxRuntime.addItem(runtime);
-            if(Comparing.equal(runtime, webAppConfiguration.getLinuxRuntime())) {
+            if (Comparing.equal(runtime, WebAppCreationDialog.DEFAULT_LINUX_RUNTIME)
+                && cbLinuxRuntime.getSelectedIndex() < 0) {
+                cbLinuxRuntime.setSelectedItem(runtime);
+            }
+            if (Comparing.equal(runtime, webAppConfiguration.getLinuxRuntime())) {
                 cbLinuxRuntime.setSelectedItem(runtime);
             }
         }

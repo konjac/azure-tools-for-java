@@ -1,63 +1,74 @@
-/**
+/*
  * Copyright (c) Microsoft Corporation
- * <p/>
+ *
  * All rights reserved.
- * <p/>
+ *
  * MIT License
- * <p/>
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  * documentation files (the "Software"), to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
  * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
- * <p/>
+ *
  * The above copyright notice and this permission notice shall be included in all copies or substantial portions of
  * the Software.
- * <p/>
+ *
  * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
  * THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
 package com.microsoft.azure.hdinsight.common;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSortedSet;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
+import com.microsoft.azure.hdinsight.common.logger.ILogger;
 import com.microsoft.azure.hdinsight.metadata.ClusterMetaDataService;
 import com.microsoft.azure.hdinsight.sdk.cluster.*;
+import com.microsoft.azure.hdinsight.sdk.storage.HDStorageAccount;
+import com.microsoft.azure.hdinsight.sdk.storage.IHDIStorageAccount;
+import com.microsoft.azure.sqlbigdata.sdk.cluster.SqlBigDataLivyLinkClusterDetail;
 import com.microsoft.azuretools.authmanage.AuthMethodManager;
-import com.microsoft.azuretools.authmanage.SubscriptionManager;
 import com.microsoft.azuretools.authmanage.models.SubscriptionDetail;
 import com.microsoft.azuretools.azurecommons.helpers.NotNull;
 import com.microsoft.azuretools.azurecommons.helpers.Nullable;
 import com.microsoft.azuretools.azurecommons.helpers.StringHelper;
 import com.microsoft.azuretools.sdkmanage.AzureManager;
 import com.microsoft.tooling.msservices.components.DefaultLoader;
-import com.microsoft.azure.hdinsight.sdk.common.AggregatedException;
-import com.microsoft.azure.hdinsight.sdk.common.AuthenticationErrorHandler;
-import com.microsoft.azure.hdinsight.sdk.common.HDIException;
-import com.microsoft.azure.hdinsight.sdk.storage.HDStorageAccount;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
+import rx.Observable;
+
+import java.util.*;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class ClusterManagerEx {
+import static java.util.Collections.emptyList;
+
+public class ClusterManagerEx implements ILogger {
 
     private static final String OSTYPE = "linux";
 
     private static ClusterManagerEx instance = null;
 
-    private List<IClusterDetail> hdinsightAdditionalClusterDetails = new ArrayList<>();
+    /**
+     * additionalClusterDetails contains all kinds of linked clusters, which consists of:
+     * 1. HDInsightAdditionalClusterDetail
+     * 2. HDInsightLivyLinkClusterDetail
+     * 3. SqlBigDataLivyLinkClusterDetail
+     */
+    private List<IClusterDetail> additionalClusterDetails = new ArrayList<>();
     private List<IClusterDetail> emulatorClusterDetails = new ArrayList<>();
 
     private boolean isListClusterSuccess = false;
-    private boolean isLIstAdditionalClusterSuccess = false;
+    private boolean isListAdditionalClusterSuccess = false;
     private boolean isListEmulatorClusterSuccess = false;
     private boolean isSelectedSubscriptionExist = false;
 
@@ -69,6 +80,11 @@ public class ClusterManagerEx {
             synchronized (ClusterManagerEx.class) {
                 if (instance == null) {
                     instance = new ClusterManagerEx();
+
+                    AuthMethodManager.getInstance().addSignOutEventListener(() -> {
+                        // Clean cached clusters
+                        instance.setCachedClusters(instance.additionalClusterDetails);
+                    });
                 }
             }
         }
@@ -97,8 +113,8 @@ public class ClusterManagerEx {
         return isListClusterSuccess;
     }
 
-    public boolean isLIstAdditionalClusterSuccess() {
-        return isLIstAdditionalClusterSuccess;
+    public boolean isListAdditionalClusterSuccess() {
+        return isListAdditionalClusterSuccess;
     }
 
     public boolean isListEmulatorClusterSuccess() { return isListEmulatorClusterSuccess; }
@@ -127,6 +143,15 @@ public class ClusterManagerEx {
         }
     }
 
+    @Nullable
+    public IClusterDetail findClusterDetail(Predicate<IClusterDetail> predicate, boolean isLinkedCluster) {
+        Stream<IClusterDetail> clusterDetailStream =
+                isLinkedCluster
+                        ? getAdditionalClusterDetails().stream()
+                        : ClusterMetaDataService.getInstance().getCachedClusterDetails().stream();
+        return clusterDetailStream.filter(predicate).findFirst().orElse(null);
+    }
+
     public Optional<IClusterDetail> getClusterDetailByName(String clusterName) {
         return getClusterDetailsWithoutAsync(true)
                 .stream()
@@ -147,40 +172,33 @@ public class ClusterManagerEx {
         ClusterMetaDataService.getInstance().addCachedClusters(clusterDetails);
     }
 
-    synchronized ImmutableList<IClusterDetail> getCachedClusters() {
+    public synchronized ImmutableList<IClusterDetail> getCachedClusters() {
         return ClusterMetaDataService.getInstance().getCachedClusterDetails();
     }
 
-    synchronized Optional<List<IClusterDetail>> getSubscriptionHDInsightClustersOfType(
-                                                            List<SubscriptionDetail> list) {
+    public Predicate<IClusterDetail> getHDInsightClusterFilterPredicate() {
+        return clusterDetail -> clusterDetail instanceof ClusterDetail ||
+                clusterDetail instanceof HDInsightAdditionalClusterDetail ||
+                clusterDetail instanceof HDInsightLivyLinkClusterDetail ||
+                clusterDetail instanceof EmulatorClusterDetail;
+    }
+
+    synchronized Observable<List<ClusterDetail>> getSubscriptionHDInsightClustersOfType(List<SubscriptionDetail> list) {
         setSelectedSubscriptionExist(list.stream().anyMatch(SubscriptionDetail::isSelected));
-
-        try {
-            Optional<List<IClusterDetail>> clusters = Optional.of(
-                    ClusterManager.getInstance().getHDInsightClustersWithSpecificType(list, OSTYPE));
-
-            // TODO: so far we have not a good way to judge whether it is token expired as
-            //       we have changed the way to list HDInsight clusters
-            isListClusterSuccess = clusters.isPresent();
-
-            return clusters;
-        } catch (AggregatedException aggregateException) {
-            if (dealWithAggregatedException(aggregateException)) {
-                DefaultLoader.getUIHelper().showError(
-                        "Failed to get HDInsight Cluster, Please make sure there's no login problem first",
-                        "List HDInsight Cluster Error");
-            }
-
-            return Optional.empty();
-        }
+        return ClusterManager.getInstance().getHDInsightClustersWithSpecificType(list, OSTYPE)
+                .doOnNext(clusters -> isListClusterSuccess = true)
+                .doOnError(err -> {
+                    log().warn("Error Refreshing HDInsight clusters. " + ExceptionUtils.getStackTrace(err));
+                    isListClusterSuccess = false;
+                });
     }
 
-    public List<IClusterDetail> getHdinsightAdditionalClusterDetails() {
-        return hdinsightAdditionalClusterDetails;
+    public List<IClusterDetail> getAdditionalClusterDetails() {
+        return additionalClusterDetails;
     }
 
-    void setHdinsightAdditionalClusterDetails(List<IClusterDetail> hdinsightAdditionalClusterDetails) {
-        this.hdinsightAdditionalClusterDetails = hdinsightAdditionalClusterDetails;
+    void setAdditionalClusterDetails(List<IClusterDetail> additionalClusterDetails) {
+        this.additionalClusterDetails = additionalClusterDetails;
     }
 
     List<IClusterDetail> getEmulatorClusterDetails() {
@@ -200,62 +218,73 @@ public class ClusterManagerEx {
     }
 
     @NotNull
-    List<IClusterDetail> getSubscriptionHDInsightClusters(@Nullable AzureManager manager) {
-        return Optional.ofNullable(manager)
-                .map(AzureManager::getSubscriptionManager)
-                .flatMap(subscriptionManager -> {
-                    try {
-                        return Optional.ofNullable(subscriptionManager.getSubscriptionDetails());
-                    } catch (IOException e) {
-                        DefaultLoader.getUIHelper().showError("Failed to get HDInsight Clusters. " +
-                                        "Please check your subscription and login at Azure Explorer (View -> Tool Windows -> Azure Explorer).",
-                                "List HDInsight Cluster Error");
+    List<ClusterDetail> getSubscriptionHDInsightClusters(@Nullable AzureManager manager) {
+        if (manager == null) {
+            return new ArrayList<>();
+        }
 
-                        return Optional.empty();
-                    }
-                })
+        return Observable.fromCallable(() -> manager.getSubscriptionManager().getSelectedSubscriptionDetails())
+                .doOnError(err -> log().warn("Failed to list HDInsight Clusters: {}", err.getMessage()))
                 .flatMap(this::getSubscriptionHDInsightClustersOfType)
-                .orElse(new ArrayList<>());
+                .onErrorResumeNext(Observable.just(new ArrayList<>()))
+                .toBlocking()
+                .singleOrDefault(new ArrayList<>());
     }
 
-    public synchronized ImmutableList<IClusterDetail> getClusterDetails() {
-        if (!isLIstAdditionalClusterSuccess) {
-            setHdinsightAdditionalClusterDetails(getAdditionalClusters());
+    /**
+     * Load all kinds of cluster details and set these clusters to cache. These clusters includes:
+     * 1. HDInsight clusters under user's azure subscription
+     * 2. HDInsight linked clusters
+     * 3. Emulator clusters
+     * 4. SQL Big Data clusters
+     * @return all kinds of cluster details
+     */
+    public ImmutableList<IClusterDetail> getClusterDetails() {
+        List<IClusterDetail> linkedClusters;
+        if (!isListAdditionalClusterSuccess()) {
+            try {
+                linkedClusters = loadAdditionalClusters();
+            } catch (JsonSyntaxException ignored) {
+                linkedClusters = emptyList();
+            }
+        } else {
+            linkedClusters = getAdditionalClusterDetails();
         }
 
-        if (!isListEmulatorClusterSuccess) {
-            setEmulatorClusterDetails(getEmulatorClusters());
+        List<IClusterDetail> emulatorClusters;
+        if (!isListEmulatorClusterSuccess()) {
+            try {
+                emulatorClusters = loadEmulatorClusters();
+            } catch (JsonSyntaxException ignored) {
+                emulatorClusters = emptyList();
+            }
+        } else {
+            emulatorClusters = getEmulatorClusterDetails();
         }
-
-        isListClusterSuccess = false;
-
-        // Prepare a cloned additional clusters to handle the intersect clusters in both subscription and linked
-        List<IClusterDetail> additionalClusters = new ArrayList<>(getHdinsightAdditionalClusterDetails());
 
         // Get clusters from Subscription, an empty list for non-logged in user.
-        Stream<IClusterDetail> clusterDetailsFromSubscription = getSubscriptionHDInsightClusters(getAzureManager())
-                                                                    .stream();
+        List<ClusterDetail> clusterDetailsFromSubscription = getSubscriptionHDInsightClusters(getAzureManager());
 
-        // Merge the clusters from subscription with linked one if the name is same
-        List<IClusterDetail> mergedClusters = clusterDetailsFromSubscription
-                .filter(clusterDetail -> clusterDetail.getSubscription().isSelected())
-                .map(cluster -> { // replace the duplicated cluster with the linked one
-                    Optional<IClusterDetail> inLinkedAndSubscriptionCluster = additionalClusters.stream()
-                            .filter(linkedCluster -> linkedCluster.getName().equals(cluster.getName()))
-                            .findFirst();
+        // Sort the merged clusters before set it to cache, sorting algorithm is based on cluster name
+        ImmutableSortedSet<IClusterDetail> mergedClusters =
+                new ImmutableSortedSet.Builder<IClusterDetail>(ComparableCluster::compareTo)
+                        .addAll(linkedClusters)
+                        .addAll(emulatorClusters)
+                        .addAll(clusterDetailsFromSubscription)
+                        .build();
 
-                    // remove the duplicated cluster from additional clusters
-                     inLinkedAndSubscriptionCluster.ifPresent(additionalClusters::remove);
+        synchronized (this) {
+            setAdditionalClusterDetails(linkedClusters);
+            isListAdditionalClusterSuccess = true;
 
-                    return  inLinkedAndSubscriptionCluster.orElse(cluster);
-                })
-                .collect(Collectors.toList());
+            setEmulatorClusterDetails(emulatorClusters);
+            isListEmulatorClusterSuccess = true;
 
-        mergedClusters.addAll(additionalClusters);
-        mergedClusters.addAll(getEmulatorClusterDetails());
+            setCachedClusters(mergedClusters.asList());
+            isListClusterSuccess = true;
 
-        setCachedClusters(mergedClusters);
-        return getCachedClusters();
+            return getCachedClusters();
+        }
     }
 
     public synchronized  void addEmulatorCluster(EmulatorClusterDetail emulatorClusterDetail) {
@@ -265,26 +294,33 @@ public class ClusterManagerEx {
         saveEmulatorClusters();
     }
 
-    public synchronized void addHDInsightAdditionalCluster(HDInsightAdditionalClusterDetail hdInsightClusterDetail) {
-
-        hdinsightAdditionalClusterDetails.add(hdInsightClusterDetail);
+    public synchronized void addAdditionalCluster(@NotNull IClusterDetail hdInsightClusterDetail) {
+        additionalClusterDetails.add(hdInsightClusterDetail);
         ClusterMetaDataService.getInstance().addClusterToCache(hdInsightClusterDetail);
-
         saveAdditionalClusters();
     }
 
-    public synchronized  void removeEmulatorCluster(EmulatorClusterDetail emulatorClusterDetail) {
+    public synchronized void updateHdiAdditionalClusterDetail(@NotNull HDInsightAdditionalClusterDetail clusterDetailToUpdate) {
+        // Remove the cluster which is a linked HDI cluster and share the same cluster name with clusterDetailToUpdate
+        this.additionalClusterDetails = additionalClusterDetails.stream()
+                .filter(clusterDetail1 ->
+                        !(clusterDetail1 instanceof HDInsightAdditionalClusterDetail
+                                && clusterDetail1.getName().equals(clusterDetailToUpdate.getName())))
+                .collect(Collectors.toList());
+        ClusterMetaDataService.getInstance().removeClusterFromCache(clusterDetailToUpdate);
+        addAdditionalCluster(clusterDetailToUpdate);
+    }
+
+    public synchronized void removeEmulatorCluster(EmulatorClusterDetail emulatorClusterDetail) {
         emulatorClusterDetails.remove(emulatorClusterDetail);
         ClusterMetaDataService.getInstance().removeClusterFromCache(emulatorClusterDetail);
 
         saveEmulatorClusters();
     }
 
-    public synchronized void removeHDInsightAdditionalCluster(HDInsightAdditionalClusterDetail hdInsightClusterDetail) {
-
-        hdinsightAdditionalClusterDetails.remove(hdInsightClusterDetail);
+    public synchronized void removeAdditionalCluster(@NotNull IClusterDetail hdInsightClusterDetail) {
+        additionalClusterDetails.remove(hdInsightClusterDetail);
         ClusterMetaDataService.getInstance().removeClusterFromCache(hdInsightClusterDetail);
-
         saveAdditionalClusters();
     }
 
@@ -302,18 +338,17 @@ public class ClusterManagerEx {
 
         for (IClusterDetail clusterDetail : cachedClusterDetails) {
             if (clusterDetail.getName().equals(clusterName) && clusterDetail instanceof HDInsightAdditionalClusterDetail) {
-                try {
-                    if (clusterDetail.getStorageAccount().getName().equals(storageName)) {
-                        return 1;
-                    }
-                } catch (HDIException e) {
+                IHDIStorageAccount storageAccount = clusterDetail.getStorageAccount();
+                if (storageAccount == null) {
                     return 0;
+                } else if (storageAccount.getName().equals(storageName)) {
+                    return 1;
                 }
 
                 List<HDStorageAccount> additionalStorageAccount = clusterDetail.getAdditionalStorageAccounts();
                 if (additionalStorageAccount != null) {
-                    for (HDStorageAccount storageAccount : additionalStorageAccount) {
-                        if (storageAccount.getName().equals(storageName)) {
+                    for (HDStorageAccount account : additionalStorageAccount) {
+                        if (account.getName().equals(storageName)) {
                             return 2;
                         }
                     }
@@ -346,86 +381,104 @@ public class ClusterManagerEx {
     }
 
     private void saveAdditionalClusters() {
-        List<IClusterDetail> additionalClusters = new ArrayList<>();
-        List<IClusterDetail> livyLinkClusters = new ArrayList<>();
+        List<IClusterDetail> hdiAdditionalClusters = new ArrayList<>();
+        List<IClusterDetail> hdiAdditionalMfaClusters = new ArrayList<>();
+        List<IClusterDetail> hdiLivyLinkClusters = new ArrayList<>();
+        List<IClusterDetail> sqlBigDatalivyLinkClusters = new ArrayList<>();
 
-        hdinsightAdditionalClusterDetails.forEach(clusterDetail -> {
+        additionalClusterDetails.forEach(clusterDetail -> {
             if (clusterDetail instanceof HDInsightLivyLinkClusterDetail) {
-                livyLinkClusters.add(clusterDetail);
-            } else {
-                additionalClusters.add(clusterDetail);
+                hdiLivyLinkClusters.add(clusterDetail);
+            } else if (clusterDetail instanceof MfaHdiAdditionalClusterDetail) {
+                hdiAdditionalMfaClusters.add(clusterDetail);
+            } else if (clusterDetail instanceof HDInsightAdditionalClusterDetail) {
+                hdiAdditionalClusters.add(clusterDetail);
+            } else if (clusterDetail instanceof SqlBigDataLivyLinkClusterDetail) {
+                sqlBigDatalivyLinkClusters.add(clusterDetail);
             }
         });
         Gson gson = new Gson();
-        String additionalClustersJson = gson.toJson(additionalClusters);
+        String additionalClustersJson = gson.toJson(hdiAdditionalClusters);
         DefaultLoader.getIdeHelper().setApplicationProperty(CommonConst.HDINSIGHT_ADDITIONAL_CLUSTERS, additionalClustersJson);
 
-        String livyLinkClustersJson = gson.toJson(livyLinkClusters);
+        String additionalMfaClustersJson = gson.toJson(hdiAdditionalMfaClusters);
+        DefaultLoader.getIdeHelper().setApplicationProperty(CommonConst.HDINSIGHT_ADDITIONAL_MFA_CLUSTERS, additionalMfaClustersJson);
+
+        String livyLinkClustersJson = gson.toJson(hdiLivyLinkClusters);
         DefaultLoader.getIdeHelper().setApplicationProperty(CommonConst.HDINSIGHT_LIVY_LINK_CLUSTERS, livyLinkClustersJson);
+
+        String sqlBigDatalivyLinkClustersJson = gson.toJson(sqlBigDatalivyLinkClusters);
+        DefaultLoader.getIdeHelper().setApplicationProperty(CommonConst.SQL_BIG_DATA_LIVY_LINK_CLUSTERS, sqlBigDatalivyLinkClustersJson);
     }
 
-    List<IClusterDetail> getAdditionalClusters() {
+    List<IClusterDetail> loadAdditionalClusters() {
         List<IClusterDetail> hdiAdditionalClusters = new ArrayList<>();
+        List<IClusterDetail> hdiAdditionalMfaClusters = new ArrayList<>();
         List<IClusterDetail> hdiLivyLinkClusters = new ArrayList<>();
+        List<IClusterDetail> sqlBigDataClusters = new ArrayList<>();
 
-        isLIstAdditionalClusterSuccess = false;
         Gson gson = new Gson();
         String additionalClustersJson = DefaultLoader.getIdeHelper().getApplicationProperty(CommonConst.HDINSIGHT_ADDITIONAL_CLUSTERS);
+        String additionalMfaClustersJson = DefaultLoader.getIdeHelper().getApplicationProperty(CommonConst.HDINSIGHT_ADDITIONAL_MFA_CLUSTERS);
         String livyLinkClustersJson = DefaultLoader.getIdeHelper().getApplicationProperty(CommonConst.HDINSIGHT_LIVY_LINK_CLUSTERS);
-        if (!StringHelper.isNullOrWhiteSpace(additionalClustersJson) && !StringHelper.isNullOrWhiteSpace(livyLinkClustersJson)) {
-            try {
-                hdiAdditionalClusters = gson.fromJson(additionalClustersJson, new TypeToken<ArrayList<HDInsightAdditionalClusterDetail>>() {
-                }.getType());
-                hdiLivyLinkClusters = gson.fromJson(livyLinkClustersJson, new TypeToken<ArrayList<HDInsightLivyLinkClusterDetail>>() {
-                }.getType());
-            } catch (JsonSyntaxException e) {
-                isLIstAdditionalClusterSuccess = false;
-                // clear local cache if we cannot get information from local json
-                DefaultLoader.getIdeHelper().unsetApplicationProperty(CommonConst.HDINSIGHT_ADDITIONAL_CLUSTERS);
-                DefaultLoader.getIdeHelper().unsetApplicationProperty(CommonConst.HDINSIGHT_LIVY_LINK_CLUSTERS);
-                DefaultLoader.getUIHelper().showException("Failed to list additional HDInsight cluster", e, "List Additional HDInsight Cluster", false, true);
-                return new ArrayList<>();
-            }
+        String sqlBigDataClustersJson = DefaultLoader.getIdeHelper().getApplicationProperty(CommonConst.SQL_BIG_DATA_LIVY_LINK_CLUSTERS);
+
+        try {
+            hdiAdditionalClusters = StringUtils.isBlank(additionalClustersJson)
+                ? emptyList()
+                : gson.fromJson(additionalClustersJson,
+                                new TypeToken<ArrayList<HDInsightAdditionalClusterDetail>>() { }.getType());
+
+            hdiAdditionalMfaClusters = StringUtils.isBlank(additionalMfaClustersJson)
+                    ? emptyList()
+                    : gson.fromJson(additionalMfaClustersJson,
+                                    new TypeToken<ArrayList<MfaHdiAdditionalClusterDetail>>() { }.getType());
+
+            hdiLivyLinkClusters = StringUtils.isBlank(livyLinkClustersJson)
+                    ? emptyList()
+                    : gson.fromJson(livyLinkClustersJson,
+                                    new TypeToken<ArrayList<HDInsightLivyLinkClusterDetail>>() { }.getType());
+
+            sqlBigDataClusters = StringUtils.isBlank(sqlBigDataClustersJson)
+                    ? emptyList()
+                    : gson.fromJson(sqlBigDataClustersJson,
+                                    new TypeToken<ArrayList<SqlBigDataLivyLinkClusterDetail>>() { }.getType());
+
+        } catch (JsonSyntaxException e) {
+            DefaultLoader.getUIHelper().showException("Failed to list linked clusters", e, "List Linked Clusters", false, true);
+
+            throw e;
         }
 
-        isLIstAdditionalClusterSuccess = true;
-        return Stream.concat(hdiAdditionalClusters.stream(), hdiLivyLinkClusters.stream()).collect(Collectors.toList());
+        Stream<IClusterDetail> hdiLinkedClusters = Stream.concat(Stream.concat(hdiAdditionalClusters.stream(), hdiLivyLinkClusters.stream())
+                , hdiAdditionalMfaClusters.stream());
+        if (sqlBigDataClusters == null) {
+            return hdiLinkedClusters.collect(Collectors.toList());
+        } else {
+            return Stream.concat(hdiLinkedClusters, sqlBigDataClusters.stream()).collect(Collectors.toList());
+        }
     }
 
-    List<IClusterDetail> getEmulatorClusters() {
+    List<IClusterDetail> loadEmulatorClusters() {
         Gson gson = new Gson();
         String json = DefaultLoader.getIdeHelper().getApplicationProperty(CommonConst.EMULATOR_CLUSTERS);
         List<IClusterDetail> emulatorClusters = new ArrayList<>();
 
-        isListEmulatorClusterSuccess = false;
         if(!StringHelper.isNullOrWhiteSpace(json)){
             try {
                 emulatorClusters = gson.fromJson(json, new TypeToken<ArrayList<EmulatorClusterDetail>>(){
                 }.getType());
             } catch (JsonSyntaxException e){
-
-                isListEmulatorClusterSuccess = false;
-                DefaultLoader.getIdeHelper().unsetApplicationProperty(CommonConst.EMULATOR_CLUSTERS);
                 DefaultLoader.getUIHelper().showException("Failed to list emulator cluster", e, "List Emulator Cluster", false, true);
-                return new ArrayList<>();
+
+                throw e;
             }
         }
 
-        isListEmulatorClusterSuccess = true;
         return emulatorClusters;
     }
 
-    private boolean dealWithAggregatedException(AggregatedException aggregateException) {
-        boolean isReAuth = false;
-        for (Exception exception : aggregateException.getExceptionList()) {
-            if (exception instanceof HDIException) {
-                if (((HDIException) exception).getErrorCode() == AuthenticationErrorHandler.AUTH_ERROR_CODE) {
-                    isReAuth = true;
-                    break;
-                }
-            }
-        }
-
-        return isReAuth;
+    public boolean isHdiReaderCluster(@NotNull IClusterDetail clusterDetail) {
+        return clusterDetail instanceof ClusterDetail && ((ClusterDetail) clusterDetail).isRoleTypeReader();
     }
 }

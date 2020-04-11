@@ -41,12 +41,12 @@ import com.microsoft.intellij.runner.AzureRunConfigurationBase;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.IOException;
 import java.nio.file.Paths;
+
+import static com.microsoft.intellij.common.CommonConst.NEED_SIGN_IN;
 
 public class WebAppOnLinuxDeployConfiguration extends AzureRunConfigurationBase<WebAppOnLinuxDeployModel> {
 
-    private static final String NEED_SIGN_IN = "Please sign in with your Azure account.";
     private static final String MISSING_SERVER_URL = "Please specify a valid Server URL.";
     private static final String MISSING_USERNAME = "Please specify Username.";
     private static final String MISSING_PASSWORD = "Please specify Password.";
@@ -85,7 +85,6 @@ public class WebAppOnLinuxDeployConfiguration extends AzureRunConfigurationBase<
         deployModel = new WebAppOnLinuxDeployModel();
     }
 
-
     @Override
     public WebAppOnLinuxDeployModel getModel() {
         return this.deployModel;
@@ -109,11 +108,7 @@ public class WebAppOnLinuxDeployConfiguration extends AzureRunConfigurationBase<
      */
     @Override
     public void validate() throws ConfigurationException {
-        try {
-            if (!AuthMethodManager.getInstance().isSignedIn()) {
-                throw new ConfigurationException(NEED_SIGN_IN);
-            }
-        } catch (IOException e) {
+        if (!AuthMethodManager.getInstance().isSignedIn()) {
             throw new ConfigurationException(NEED_SIGN_IN);
         }
         if (Utils.isEmptyString(deployModel.getDockerFilePath())
